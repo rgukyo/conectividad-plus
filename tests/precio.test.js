@@ -58,6 +58,24 @@ test('mensualidad de un cliente usa solo sus equipos', function () {
   assert.strictEqual(CP.mensualidadCliente(data.clientes[0], data.dispositivos), 50);
 });
 
+test('un cliente exento paga 0 aunque tenga equipos y promo', function () {
+  var dispositivos = [
+    { id: 'd1', cliente_id: 'c1' },
+    { id: 'd2', cliente_id: 'c1' }
+  ];
+  assert.strictEqual(CP.esExento({ exento: 'SI' }), true);
+  assert.strictEqual(CP.esExento({ exento: 'sí' }), true);
+  assert.strictEqual(CP.esExento({ exento: '1' }), true);
+  assert.strictEqual(CP.esExento({ exento: 'NO' }), false);
+  assert.strictEqual(CP.esExento({ exento: '' }), false);
+  assert.strictEqual(CP.esExento({}), false);
+  assert.strictEqual(CP.mensualidadCliente({ id: 'c1', promo: 'SI', exento: 'SI' }, dispositivos), 0);
+  assert.strictEqual(CP.mensualidadCliente({ id: 'c1', promo: 'SI', exento: 'sí' }, dispositivos), 0);
+  assert.strictEqual(CP.mensualidadCliente({ id: 'c1', promo: 'NO', exento: 'SI' }, dispositivos), 0);
+  assert.strictEqual(CP.mensualidadCliente({ id: 'c1', promo: 'SI', exento: 'NO' }, dispositivos), 50);
+  assert.strictEqual(CP.mensualidadCliente({ id: 'c1', promo: 'SI' }, dispositivos), 50);
+});
+
 if (require.main === module) {
   const path = require('path');
   process.argv.slice(2).filter(function (file) {

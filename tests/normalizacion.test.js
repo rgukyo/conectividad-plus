@@ -80,6 +80,25 @@ test('validar cliente deja el celular en 10 dígitos y la promo en SI/NO', funct
   assert.strictEqual(res.cliente.area, 'Centro');
   assert.strictEqual(res.cliente.promo, 'SI');
   assert.strictEqual(res.cliente.meses_pagados, 0);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(res.cliente, 'exento'), false);
+  var marcado = CP.validarCliente({
+    nombre: 'Ana',
+    celular: '5500000001',
+    promo: 'NO',
+    exento: 'sí'
+  });
+  assert.strictEqual(marcado.ok, true);
+  assert.strictEqual(marcado.cliente.exento, 'SI');
+  var apagado = CP.validarCliente({
+    nombre: 'Ana',
+    celular: '5500000001',
+    exento: 'NO'
+  });
+  assert.strictEqual(apagado.cliente.exento, 'NO');
+  var fusion = CP.fusionarCliente({ id: 'c1', exento: 'SI', notas: 'Portón' }, res.cliente);
+  assert.strictEqual(fusion.exento, 'SI');
+  assert.strictEqual(CP.fusionarCliente({ id: 'c1', exento: 'SI' }, marcado.cliente).exento, 'SI');
+  assert.strictEqual(CP.fusionarCliente({ id: 'c1', exento: 'SI' }, apagado.cliente).exento, 'NO');
   assert.strictEqual(CP.validarCliente({ nombre: '', celular: '5500000001' }).ok, false);
 });
 
@@ -211,7 +230,12 @@ test('el script de la hoja trae la clave, el candado y las mismas reglas', funct
   assert.ok(src.indexOf('function doPost') >= 0);
   assert.ok(src.indexOf("getProperty('CLAVE')") >= 0);
   assert.ok(src.indexOf('LockService.getScriptLock') >= 0);
-  assert.ok(src.indexOf("['id', 'nombre', 'celular', 'area', 'promo', 'fecha_ultimo_pago', 'proximo_vencimiento', 'meses_pagados', 'notas']") >= 0);
+  assert.ok(src.indexOf("['id', 'nombre', 'celular', 'area', 'promo', 'fecha_ultimo_pago', 'proximo_vencimiento', 'meses_pagados', 'notas', 'exento']") >= 0);
+  assert.ok(src.indexOf('function agregarEncabezadosFaltantes_') >= 0);
+  assert.ok(src.indexOf('agregarEncabezadosFaltantes_(sh, headers)') >= 0);
+  assert.ok(src.indexOf('function esExento_') >= 0);
+  assert.ok(src.indexOf('esExento_(cliente) ? 0 : precioMensual_(n, cliente.promo)') >= 0);
+  assert.ok(src.indexOf("copiarSiViene_(cliente, input, 'exento'") >= 0);
   assert.ok(src.indexOf("['id', 'cliente_id', 'tipo', 'modelo', 'mac', 'notas']") >= 0);
   assert.ok(src.indexOf("['id', 'cliente_id', 'fecha', 'monto', 'meses', 'cubre_hasta', 'registrado_por']") >= 0);
   assert.ok(src.indexOf('upsertCliente') >= 0);

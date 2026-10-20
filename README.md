@@ -51,6 +51,7 @@ Quien tenga esa URL y la clave puede leer y modificar la hoja. Por eso la clave 
   - 2 equipos → $50
   - 3 equipos → $80
   - 4 equipos → $100
+- Con `exento` en `SI`: la mensualidad es $0, no sale como vencido ni en por cobrar, y al registrar un pago no se abre WhatsApp. El pago sí se puede guardar.
 
 ## Día 15
 
@@ -62,11 +63,11 @@ El corte es siempre el día 15. Al registrar un pago, los meses se suman al venc
 - Debía el 20/09 y pagó un mes → queda el 15/10.
 - Si es el primer pago y no hay fecha, queda el 15 del mes siguiente a la fecha del pago. Un mes extra corre un mes más.
 
-Después de guardarlo se abre WhatsApp con el recado de gracias.
+Después de guardarlo se abre WhatsApp con el recado de gracias. Si el cliente está exento, el pago se guarda y no se abre WhatsApp.
 
 En la lista, **Por vencer** significa que faltan 5 días o menos. **Vencido** es cuando la fecha ya pasó.
 
-**Por cobrar este mes** suma un mes de quienes vencen en el mes en curso, de quienes ya vencieron y de quienes no tienen fecha. No multiplica los meses atrasados.
+**Por cobrar este mes** suma un mes de quienes vencen en el mes en curso, de quienes ya vencieron y de quienes no tienen fecha. No multiplica los meses atrasados. Un cliente exento no entra en esa suma ni en el conteo de vencidos.
 
 ## Importar lo que ya tienen anotado
 

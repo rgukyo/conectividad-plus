@@ -188,6 +188,7 @@
           celular: String(c.celular || '').trim(),
           area: String(c.area || '').trim(),
           promo: CP.esPromo(c.promo) ? 'SI' : 'NO',
+          exento: CP.esPromo(c.exento) ? 'SI' : 'NO',
           fecha_ultimo_pago: fecha(c.fecha_ultimo_pago),
           proximo_vencimiento: fecha(c.proximo_vencimiento),
           meses_pagados: c.meses_pagados === '' || c.meses_pagados == null ? 0 : Number(c.meses_pagados) || 0,
@@ -447,20 +448,20 @@
   function htmlInicio() {
     var hoy = new Date();
     var vencidos = state.data.clientes.filter(function (c) {
-      return CP.estadoCliente(c.proximo_vencimiento, hoy).clave === 'vencido';
+      return CP.estadoDeCliente(c, hoy).clave === 'vencido';
     });
     var pronto = state.data.clientes.filter(function (c) {
-      return CP.estadoCliente(c.proximo_vencimiento, hoy).clave === 'por_vencer';
+      return CP.estadoDeCliente(c, hoy).clave === 'por_vencer';
     });
     var sinFecha = state.data.clientes.filter(function (c) {
-      return CP.estadoCliente(c.proximo_vencimiento, hoy).clave === 'sin_fecha';
+      return CP.estadoDeCliente(c, hoy).clave === 'sin_fecha';
     });
     vencidos.sort(function (a, b) {
-      return CP.estadoCliente(a.proximo_vencimiento, hoy).dias - CP.estadoCliente(b.proximo_vencimiento, hoy).dias;
+      return CP.estadoDeCliente(a, hoy).dias - CP.estadoDeCliente(b, hoy).dias;
     });
     return '<h1>Hoy</h1>' +
       htmlResumen(true) +
-      '<p class="ayuda">Por cobrar este mes suma un mes de quienes vencen en este mes, de quienes ya vencieron y de quienes no tienen fecha. No acumula meses atrasados.</p>' +
+      '<p class="ayuda">Por cobrar este mes suma un mes de quienes vencen en este mes, de quienes ya vencieron y de quienes no tienen fecha. No acumula meses atrasados. Quien está exento de pago no entra.</p>' +
       '<p><a class="btn primary block" href="#/clientes/nuevo">Nuevo cliente</a></p>' +
       (state.settings.url ? '<p><button type="button" class="btn ghost block" data-action="actualizar">Actualizar</button></p>' : '') +
       htmlGrupo('Vencidos', ordenarPorNombre(vencidos), 'Nadie está vencido.') +
@@ -489,12 +490,12 @@
   function htmlVencidos() {
     var hoy = new Date();
     var lista = state.data.clientes.filter(function (c) {
-      return CP.estadoCliente(c.proximo_vencimiento, hoy).clave === 'vencido';
+      return CP.estadoDeCliente(c, hoy).clave === 'vencido';
     }).sort(function (a, b) {
-      return CP.estadoCliente(a.proximo_vencimiento, hoy).dias - CP.estadoCliente(b.proximo_vencimiento, hoy).dias;
+      return CP.estadoDeCliente(a, hoy).dias - CP.estadoDeCliente(b, hoy).dias;
     });
     var cuerpo = lista.length ? '<ul class="lista">' + lista.map(function (c) {
-      var estado = CP.estadoCliente(c.proximo_vencimiento, hoy);
+      var estado = CP.estadoDeCliente(c, hoy);
       var total = CP.mensualidadCliente(c, state.data.dispositivos);
       return '<li class="card"><strong>' + esc(c.nombre) + '</strong>' +
         '<p class="muted">' + esc(c.area || 'Sin área') + ' · ' + esc(CP.textoDias(estado)) + '</p>' +
@@ -536,7 +537,7 @@
 
   function htmlDetalle(cliente) {
     if (!cliente) return htmlNoEsta('Ese cliente no está en la lista.');
-    var estado = CP.estadoCliente(cliente.proximo_vencimiento, new Date());
+    var estado = CP.estadoDeCliente(cliente, new Date());
     var equipos = CP.equiposDeCliente(state.data.dispositivos, cliente.id);
     var cel = CP.normalizarCelular(cliente.celular);
     return htmlVolver('#/clientes', 'Clientes') +
@@ -562,7 +563,7 @@
     var nuevo = !cliente;
     if (!nuevo && !cliente.id) return htmlNoEsta('Ese cliente no está en la lista.');
     cliente = cliente || {
-      id: '', nombre: '', celular: '', area: '', promo: 'NO',
+      id: '', nombre: '', celular: '', area: '', promo: 'NO', exento: 'NO',
       fecha_ultimo_pago: '', proximo_vencimiento: '', meses_pagados: 0, notas: ''
     };
     var areas = areasUnicas().map(function (area) {
@@ -578,6 +579,8 @@
       '<datalist id="lista-areas">' + areas + '</datalist>' +
       '<label class="check"><input type="checkbox" name="promo"' + (cliente.promo === 'SI' ? ' checked' : '') + '><span>Promo activa</span></label>' +
       '<p class="ayuda">Con promo, cada dos equipos restan $10. 2 equipos quedan en $50, 3 en $80 y 4 en $100.</p>' +
+      '<label class="check"><input type="checkbox" name="exento"' + (cliente.exento === 'SI' ? ' checked' : '') + '><span>Exento de pago</span></label>' +
+      '<p class="ayuda">Exento de pago deja la mensualidad en $0. No sale como vencido ni en por cobrar, y el pago no abre WhatsApp.</p>' +
       '<label class="campo">Notas<textarea name="notas" maxlength="2000">' + esc(cliente.notas) + '</textarea></label>' +
       '<details><summary>Fechas, si ya las traías anotadas</summary>' +
       '<label class="campo">Último pago<input name="fecha_ultimo_pago" type="date" value="' + esc(cliente.fecha_ultimo_pago) + '"></label>' +
@@ -614,12 +617,13 @@
     if (!cliente) return htmlNoEsta('Ese cliente no está en la lista.');
     if (state.pagoHecho) return htmlPagoListo(cliente, state.pagoHecho);
     var mensual = CP.mensualidadCliente(cliente, state.data.dispositivos);
+    var exento = CP.esExento(cliente);
     var fecha = hoyISO();
     var monto = mensual;
     return htmlVolver('#/clientes/' + seg(cliente.id), cliente.nombre) +
       '<h1>Registrar pago</h1>' +
       htmlDesglose(cliente) +
-      (mensual === 0 ? '<p class="aviso warn">Este cliente no tiene equipos. La mensualidad sale en $0.</p>' : '') +
+      (!exento && mensual === 0 ? '<p class="aviso warn">Este cliente no tiene equipos. La mensualidad sale en $0.</p>' : '') +
       '<form id="form-pago">' +
       '<input type="hidden" name="cliente_id" value="' + esc(cliente.id) + '">' +
       '<label class="campo">Fecha<input name="fecha" type="date" required value="' + fecha + '"></label>' +
@@ -631,18 +635,24 @@
       '<label class="campo">Monto recibido<input name="monto" inputmode="decimal" value="' + esc(monto) + '"></label>' +
       '<label class="campo">Tu nombre<input name="registrado_por" maxlength="80" required value="' + esc(state.settings.nombre) + '" placeholder="Quién recibe el pago"></label>' +
       '<div id="vista-pago" class="preview">' + htmlPreviewPago(cliente, fecha, 1, monto) + '</div>' +
-      '<button class="btn primary block" type="submit"' + (state.soloLectura ? ' disabled' : '') + '>' + (state.guardando ? 'Guardando…' : 'Guardar pago y abrir WhatsApp') + '</button>' +
+      '<button class="btn primary block" type="submit"' + (state.soloLectura ? ' disabled' : '') + '>' + (state.guardando ? 'Guardando…' : (exento ? 'Guardar pago' : 'Guardar pago y abrir WhatsApp')) + '</button>' +
       '</form>';
   }
 
   function htmlPagoListo(cliente, hecho) {
+    var aviso = '';
+    if (CP.esExento(cliente)) {
+      aviso = '<p class="ayuda">Exento de pago: no se manda recordatorio por WhatsApp.</p>';
+    } else if (hecho.url) {
+      aviso = '<a class="btn primary block" href="' + esc(hecho.url) + '" target="_blank" rel="noopener">Abrir WhatsApp</a>';
+    } else {
+      aviso = '<p class="aviso warn">El celular no tiene 10 dígitos, así que no se armó el enlace.</p>';
+    }
     return htmlVolver('#/clientes/' + seg(cliente.id), cliente.nombre) +
       '<h1>Pago guardado</h1>' +
       '<p>Cubierto hasta el <strong>' + esc(CP.fechaLarga(hecho.pago.cubre_hasta)) + '</strong>.</p>' +
-      '<div class="mensaje-box">' + esc(hecho.texto) + '</div>' +
-      (hecho.url
-        ? '<a class="btn primary block" href="' + esc(hecho.url) + '" target="_blank" rel="noopener">Abrir WhatsApp</a>'
-        : '<p class="aviso warn">El celular no tiene 10 dígitos, así que no se armó el enlace.</p>') +
+      (hecho.texto ? '<div class="mensaje-box">' + esc(hecho.texto) + '</div>' : '') +
+      aviso +
       '<a class="btn ghost block" href="#/clientes/' + seg(cliente.id) + '">Volver al cliente</a>';
   }
 
@@ -651,9 +661,12 @@
       monto = CP.mensualidadCliente(cliente, state.data.dispositivos) * (parseInt(meses, 10) || 1);
     }
     var cubre = CP.cubreHasta(cliente.proximo_vencimiento, fecha, meses);
+    var hasta = '<p class="total"><span>Queda cubierto hasta</span><strong>' + esc(cubre ? CP.fechaLarga(cubre) : '—') + '</strong></p>';
+    if (CP.esExento(cliente)) {
+      return hasta + '<p class="ayuda">Exento de pago: se guarda el pago y no se abre WhatsApp.</p>';
+    }
     var texto = cubre ? CP.mensajeWhatsApp(cliente.nombre, monto, cubre) : 'Revisa la fecha del pago.';
-    return '<p class="total"><span>Queda cubierto hasta</span><strong>' + esc(cubre ? CP.fechaLarga(cubre) : '—') + '</strong></p>' +
-      '<div class="mensaje-box">' + esc(texto) + '</div>';
+    return hasta + '<div class="mensaje-box">' + esc(texto) + '</div>';
   }
 
   function htmlAjustes() {
@@ -712,9 +725,9 @@
   }
 
   function htmlClienteLink(c) {
-    var estado = CP.estadoCliente(c.proximo_vencimiento, new Date());
+    var estado = CP.estadoDeCliente(c, new Date());
     var n = CP.equiposDeCliente(state.data.dispositivos, c.id).length;
-    var total = CP.precioMensual(n, c.promo);
+    var total = CP.mensualidadCliente(c, state.data.dispositivos);
     return '<a class="item" href="#/clientes/' + seg(c.id) + '">' +
       '<span class="item-main"><strong>' + esc(c.nombre) + '</strong>' +
       '<span class="muted">' + esc(c.area || 'Sin área') + ' · ' + n + (n === 1 ? ' equipo' : ' equipos') +
@@ -723,11 +736,16 @@
   }
 
   function htmlChip(estado) {
-    var clase = { al_corriente: 'ok', por_vencer: 'warn', vencido: 'bad' }[estado.clave] || 'mute';
+    var clase = { al_corriente: 'ok', por_vencer: 'warn', vencido: 'bad', exento: 'mute' }[estado.clave] || 'mute';
     return '<span class="chip ' + clase + '">' + esc(estado.etiqueta) + '</span>';
   }
 
   function htmlDesglose(cliente) {
+    if (CP.esExento(cliente)) {
+      return '<section class="desglose"><h2>Mensualidad</h2>' +
+        '<p>Exento de pago. La mensualidad queda en $0.</p>' +
+        '<p class="total"><span>Total al mes</span><strong class="num">' + esc(dinero(0)) + '</strong></p></section>';
+    }
     var n = CP.equiposDeCliente(state.data.dispositivos, cliente.id).length;
     var d = CP.desgloseMensual(n, cliente.promo);
     var promo = d.promo
@@ -946,6 +964,7 @@
       celular: val(form, 'celular'),
       area: val(form, 'area'),
       promo: form.elements.promo && form.elements.promo.checked ? 'SI' : 'NO',
+      exento: form.elements.exento && form.elements.exento.checked ? 'SI' : 'NO',
       fecha_ultimo_pago: val(form, 'fecha_ultimo_pago'),
       proximo_vencimiento: val(form, 'proximo_vencimiento'),
       meses_pagados: val(form, 'meses_pagados'),
@@ -1016,7 +1035,8 @@
       monto: val(form, 'monto'),
       registrado_por: nombre
     };
-    var abrir = prepararVentana();
+    var exento = CP.esExento(cliente);
+    var abrir = exento ? null : prepararVentana();
     state.guardando = true;
     marcarGuardando(form);
     guardarPago(entrada).then(function (res) {
@@ -1025,17 +1045,21 @@
         state.settings.nombre = nombre;
         guardarSettings();
       }
-      var texto = CP.mensajeWhatsApp(cliente.nombre, res.pago.monto, res.pago.cubre_hasta);
-      var url = CP.enlaceWhatsApp(cliente.celular, texto);
-      if (url) abrir(url);
-      else abrir.cerrar();
+      var texto = '';
+      var url = '';
+      if (!exento) {
+        texto = CP.mensajeWhatsApp(cliente.nombre, res.pago.monto, res.pago.cubre_hasta);
+        url = CP.enlaceWhatsApp(cliente.celular, texto);
+        if (url) abrir(url);
+        else abrir.cerrar();
+      }
       if (sigueEnPago(cliente.id)) {
         state.pagoHecho = { pago: res.pago, texto: texto, url: url };
         render();
       } else toast('Pago guardado.');
     }).catch(function (err) {
       state.guardando = false;
-      abrir.cerrar();
+      if (abrir) abrir.cerrar();
       marcarGuardando(form, false);
       toast(mensaje(err));
     });
@@ -1052,7 +1076,10 @@
     var guardando = activo !== false;
     boton.disabled = guardando || state.soloLectura;
     if (guardando) boton.textContent = 'Guardando…';
-    else if (idFormulario(form) === 'form-pago') boton.textContent = 'Guardar pago y abrir WhatsApp';
+    else if (idFormulario(form) === 'form-pago') {
+      var clientePago = buscarCliente(val(form, 'cliente_id'));
+      boton.textContent = clientePago && CP.esExento(clientePago) ? 'Guardar pago' : 'Guardar pago y abrir WhatsApp';
+    }
     else boton.textContent = 'Guardar';
   }
 

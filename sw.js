@@ -1,5 +1,5 @@
 /* Conectividad Plus. La misma cadena VERSION está en js/app.js. */
-var VERSION = '3';
+var VERSION = '4';
 var CACHE = 'conectividad-plus-' + VERSION;
 var SHELL = [
   './',
@@ -10,8 +10,13 @@ var SHELL = [
   './js/demo-data.js',
   './js/app.js',
   './favicon.ico',
+  './icons/icon-64.png',
   './icons/icon-192.png',
-  './icons/icon-512.png'
+  './icons/icon-512.png',
+  './icons/icon-maskable-192.png',
+  './icons/icon-maskable-512.png',
+  './img/logo.webp',
+  './img/logo.jpg'
 ];
 
 self.addEventListener('install', function (event) {
@@ -64,7 +69,7 @@ self.addEventListener('fetch', function (event) {
     event.respondWith(fetch(req));
     return;
   }
-  if (!pideRedPrimero(req) && !/\.(png|ico|json|webmanifest)$/.test(url.pathname)) return;
+  if (!pideRedPrimero(req) && !/\.(png|ico|webp|jpg|json|webmanifest)$/.test(url.pathname)) return;
   event.respondWith(redLuegoCache(req));
 });
 

@@ -51,12 +51,31 @@ test('el azul eléctrico es el color de la marca y los íconos siguen en la cach
   assert.ok(css.indexOf('--ok: #1c7a45') >= 0);
   assert.ok(html.indexOf('name="theme-color" content="#0066FF"') >= 0);
   assert.ok(manifest.indexOf('"theme_color": "#0066FF"') >= 0);
+  assert.ok(manifest.indexOf('"background_color": "#071530"') >= 0);
+  assert.ok(manifest.indexOf('"purpose": "maskable"') >= 0);
+  assert.ok(manifest.indexOf('icons/icon-maskable-512.png') >= 0);
   assert.strictEqual(css.indexOf('#0c6b63'), -1);
   assert.strictEqual(html.indexOf('#0c6b63'), -1);
+  assert.ok(html.indexOf('icons/icon-192.png') >= 0);
+  assert.ok(html.indexOf('Conectividad Plus') >= 0);
   assert.ok(sw.indexOf("'./icons/icon-192.png'") >= 0);
   assert.ok(sw.indexOf("'./icons/icon-512.png'") >= 0);
+  assert.ok(sw.indexOf("'./icons/icon-maskable-192.png'") >= 0);
+  assert.ok(sw.indexOf("'./icons/icon-maskable-512.png'") >= 0);
+  assert.ok(sw.indexOf("'./img/logo.webp'") >= 0);
+  assert.ok(sw.indexOf("'./img/logo.jpg'") >= 0);
   assert.ok(fs.statSync(path.join(root, 'icons', 'icon-192.png')).size > 500);
   assert.ok(fs.statSync(path.join(root, 'icons', 'icon-512.png')).size > 500);
+  assert.ok(fs.statSync(path.join(root, 'icons', 'icon-maskable-512.png')).size > 500);
+  assert.ok(fs.statSync(path.join(root, 'favicon.ico')).size > 200);
+  var jpg = fs.statSync(path.join(root, 'img', 'logo.jpg')).size;
+  var webp = fs.statSync(path.join(root, 'img', 'logo.webp')).size;
+  assert.ok(jpg > 1000 && jpg < 150 * 1024, 'logo.jpg ' + jpg);
+  assert.ok(webp > 1000 && webp < 150 * 1024, 'logo.webp ' + webp);
+  var app = fs.readFileSync(path.join(root, 'js', 'app.js'), 'utf8');
+  assert.ok(app.indexOf('img/logo.webp') >= 0);
+  assert.ok(app.indexOf('img/logo.jpg') >= 0);
+  assert.ok(app.indexOf('logo-inicio') >= 0);
 });
 
 test('la versión del service worker y la de la app son la misma', function () {
@@ -86,7 +105,11 @@ test('instalar guarda el cascarón y no toma el control', function () {
     './js/app.js',
     './favicon.ico',
     './icons/icon-192.png',
-    './icons/icon-512.png'
+    './icons/icon-512.png',
+    './icons/icon-maskable-192.png',
+    './icons/icon-maskable-512.png',
+    './img/logo.webp',
+    './img/logo.jpg'
   ].forEach(function (url) {
     assert.ok(sw.indexOf("'" + url + "'") >= 0, url);
   });

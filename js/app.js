@@ -5,7 +5,7 @@
   var K_SETTINGS = 'cp.settings.v1';
   var K_CACHE = 'cp.cache.v1';
   var K_DEMO = 'cp.demo.v1';
-  var VERSION = '3';
+  var VERSION = '4';
 
   var state = {
     settings: { url: '', clave: '', nombre: '' },
@@ -479,7 +479,11 @@
     vencidos.sort(function (a, b) {
       return CP.estadoDeCliente(a, hoy).dias - CP.estadoDeCliente(b, hoy).dias;
     });
-    return '<h1>Hoy</h1>' +
+    return '<picture>' +
+      '<source srcset="img/logo.webp" type="image/webp">' +
+      '<img class="logo-inicio" src="img/logo.jpg" alt="Conectividad Plus. Velocidad y conexión sin límites." width="800" height="722">' +
+      '</picture>' +
+      '<h1>Hoy</h1>' +
       htmlResumen(true) +
       '<p class="ayuda">Por cobrar este mes suma un mes de quienes vencen en este mes, de quienes ya vencieron y de quienes no tienen fecha. No acumula meses atrasados. Quien está exento de pago no entra.</p>' +
       '<p><a class="btn primary block" href="#/clientes/nuevo">Nuevo cliente</a></p>' +

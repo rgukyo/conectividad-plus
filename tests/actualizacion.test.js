@@ -39,6 +39,26 @@ test('un formulario con texto nuevo está sucio y uno intacto no', function () {
   assert.strictEqual(CP.formularioSucio(null), false);
 });
 
+test('el azul eléctrico es el color de la marca y los íconos siguen en la caché', function () {
+  var root = path.join(__dirname, '..');
+  var css = fs.readFileSync(path.join(root, 'css', 'styles.css'), 'utf8');
+  var html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  var manifest = fs.readFileSync(path.join(root, 'manifest.json'), 'utf8');
+  var sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
+  assert.ok(css.indexOf('--blue: #0066FF') >= 0);
+  assert.ok(css.indexOf('--blue-dark: #0047CC') >= 0);
+  assert.ok(css.indexOf('--bad: #a33b32') >= 0);
+  assert.ok(css.indexOf('--ok: #1c7a45') >= 0);
+  assert.ok(html.indexOf('name="theme-color" content="#0066FF"') >= 0);
+  assert.ok(manifest.indexOf('"theme_color": "#0066FF"') >= 0);
+  assert.strictEqual(css.indexOf('#0c6b63'), -1);
+  assert.strictEqual(html.indexOf('#0c6b63'), -1);
+  assert.ok(sw.indexOf("'./icons/icon-192.png'") >= 0);
+  assert.ok(sw.indexOf("'./icons/icon-512.png'") >= 0);
+  assert.ok(fs.statSync(path.join(root, 'icons', 'icon-192.png')).size > 500);
+  assert.ok(fs.statSync(path.join(root, 'icons', 'icon-512.png')).size > 500);
+});
+
 test('la versión del service worker y la de la app son la misma', function () {
   var sw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
   var app = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'utf8');

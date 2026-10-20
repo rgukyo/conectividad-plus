@@ -56,14 +56,17 @@ test('el azul eléctrico es el color de la marca y los íconos siguen en la cach
   assert.ok(manifest.indexOf('icons/icon-maskable-512.png') >= 0);
   assert.strictEqual(css.indexOf('#0c6b63'), -1);
   assert.strictEqual(html.indexOf('#0c6b63'), -1);
+  assert.ok(html.indexOf('icons/icon-64.png') >= 0);
   assert.ok(html.indexOf('icons/icon-192.png') >= 0);
   assert.ok(html.indexOf('Conectividad Plus') >= 0);
+  assert.ok(sw.indexOf("'./icons/icon-64.png'") >= 0);
   assert.ok(sw.indexOf("'./icons/icon-192.png'") >= 0);
   assert.ok(sw.indexOf("'./icons/icon-512.png'") >= 0);
   assert.ok(sw.indexOf("'./icons/icon-maskable-192.png'") >= 0);
   assert.ok(sw.indexOf("'./icons/icon-maskable-512.png'") >= 0);
   assert.ok(sw.indexOf("'./img/logo.webp'") >= 0);
   assert.ok(sw.indexOf("'./img/logo.jpg'") >= 0);
+  assert.ok(fs.statSync(path.join(root, 'icons', 'icon-64.png')).size > 200);
   assert.ok(fs.statSync(path.join(root, 'icons', 'icon-192.png')).size > 500);
   assert.ok(fs.statSync(path.join(root, 'icons', 'icon-512.png')).size > 500);
   assert.ok(fs.statSync(path.join(root, 'icons', 'icon-maskable-512.png')).size > 500);
@@ -104,6 +107,7 @@ test('instalar guarda el cascarón y no toma el control', function () {
     './js/demo-data.js',
     './js/app.js',
     './favicon.ico',
+    './icons/icon-64.png',
     './icons/icon-192.png',
     './icons/icon-512.png',
     './icons/icon-maskable-192.png',
@@ -122,6 +126,11 @@ test('instalar guarda el cascarón y no toma el control', function () {
   assert.ok(sw.indexOf("req.mode === 'navigate'") >= 0);
   assert.ok(sw.indexOf('index\\.html') >= 0);
   assert.ok(sw.indexOf('\\.(js|css)$') >= 0);
+  var fetchHandler = entre(sw, "addEventListener('fetch'", 'function redLuegoCache');
+  assert.ok(fetchHandler.indexOf('webp') >= 0);
+  assert.ok(fetchHandler.indexOf('jpg') >= 0);
+  assert.ok(fetchHandler.indexOf('png') >= 0);
+  assert.ok(fetchHandler.indexOf('ico') >= 0);
   assert.ok(sw.indexOf('return fetch(req)') >= 0);
   assert.ok(sw.indexOf('caches.match(req)') >= 0);
   assert.ok(sw.indexOf("caches.match('./index.html')") >= 0);

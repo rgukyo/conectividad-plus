@@ -10,6 +10,7 @@ var SHELL = [
   './js/demo-data.js',
   './js/app.js',
   './favicon.ico',
+  './icons/icon-64.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-192.png',
@@ -68,7 +69,7 @@ self.addEventListener('fetch', function (event) {
     event.respondWith(fetch(req));
     return;
   }
-  if (!pideRedPrimero(req) && !/\.(png|ico|json|webmanifest)$/.test(url.pathname)) return;
+  if (!pideRedPrimero(req) && !/\.(png|ico|webp|jpg|json|webmanifest)$/.test(url.pathname)) return;
   event.respondWith(redLuegoCache(req));
 });
 

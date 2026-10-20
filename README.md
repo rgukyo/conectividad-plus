@@ -51,6 +51,7 @@ Quien tenga esa URL y la clave puede leer y modificar la hoja. Por eso la clave 
   - 2 equipos → $50
   - 3 equipos → $80
   - 4 equipos → $100
+- Con `exento` en `SI`: la mensualidad es $0, no sale como vencido ni en por cobrar, y al registrar un pago no se abre WhatsApp. El pago sí se puede guardar.
 
 ## Día 15
 
@@ -62,11 +63,11 @@ El corte es siempre el día 15. Al registrar un pago, los meses se suman al venc
 - Debía el 20/09 y pagó un mes → queda el 15/10.
 - Si es el primer pago y no hay fecha, queda el 15 del mes siguiente a la fecha del pago. Un mes extra corre un mes más.
 
-Después de guardarlo se abre WhatsApp con el recado de gracias.
+Después de guardarlo se abre WhatsApp con el recado de gracias. Si el cliente está exento, el pago se guarda y no se abre WhatsApp.
 
 En la lista, **Por vencer** significa que faltan 5 días o menos. **Vencido** es cuando la fecha ya pasó.
 
-**Por cobrar este mes** suma un mes de quienes vencen en el mes en curso, de quienes ya vencieron y de quienes no tienen fecha. No multiplica los meses atrasados.
+**Por cobrar este mes** suma un mes de quienes vencen en el mes en curso, de quienes ya vencieron y de quienes no tienen fecha. No multiplica los meses atrasados. Un cliente exento no entra en esa suma ni en el conteo de vencidos.
 
 ## Importar lo que ya tienen anotado
 
@@ -74,7 +75,9 @@ Está en `tools/import_template.md`. Se pega en la hoja. No guardes ese pegado e
 
 ## Sin internet
 
-La app guarda en el teléfono la última copia que sí cargó. Sin señal se puede consultar. Para anotar algo nuevo hace falta conexión. El modo demostración sí se puede modificar sin red, y se queda solo en ese teléfono.
+La primera visita guarda la página, los scripts, el estilo, el manifiesto y los íconos. Sin señal, esa copia abre la app. Para anotar algo nuevo en la hoja hace falta conexión. El modo demostración sí se puede modificar sin red, y se queda solo en ese teléfono.
+
+Si se publica una versión nueva, aparece el aviso «Hay una versión nueva — Actualizar». No recarga sola. Si el formulario tiene cambios, pregunta «Tienes cambios sin guardar…» antes de seguir. Si otra pestaña ya actualizó, el aviso se quita. La versión se ve en Ajustes.
 
 ## Pruebas
 

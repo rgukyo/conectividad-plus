@@ -108,6 +108,77 @@ test('por cobrar suma un mes de vencidos, de este mes y de quienes no tienen fec
   assert.strictEqual(otraVez.detalle.length, 1);
 });
 
+test('un exento vencido no entra en por cobrar ni se cuenta como vencido', function () {
+  var dispositivos = [
+    { id: 'a', cliente_id: 'A' },
+    { id: 'e1', cliente_id: 'E' },
+    { id: 'e2', cliente_id: 'E' },
+    { id: 'f', cliente_id: 'F' }
+  ];
+  var clientes = [
+    { id: 'A', promo: 'NO', exento: 'NO', proximo_vencimiento: '2026-09-15' },
+    { id: 'E', promo: 'SI', exento: 'SI', proximo_vencimiento: '2026-09-15' },
+    { id: 'F', promo: 'NO', exento: 'SI', proximo_vencimiento: '' },
+    { id: 'G', promo: 'NO', exento: 'NO', proximo_vencimiento: '2026-10-22' }
+  ];
+  var cobro = CP.porCobrarEsteMes(clientes, dispositivos, '2026-10-20');
+  assert.strictEqual(cobro.total, 30);
+  assert.deepStrictEqual(cobro.detalle.map(function (x) { return x.id; }), ['A', 'G']);
+  assert.strictEqual(cobro.detalle[1].monto, 0);
+  var r = CP.resumen({ clientes: clientes, dispositivos: dispositivos }, '2026-10-20');
+  assert.strictEqual(r.vencidos, 1);
+  assert.strictEqual(r.porVencer, 1);
+  assert.strictEqual(r.porCobrar, 30);
+  assert.strictEqual(r.clientes, 4);
+  var exento = CP.estadoDeCliente(clientes[1], '2026-10-20');
+  assert.strictEqual(exento.clave, 'exento');
+  assert.strictEqual(exento.etiqueta, 'Exento');
+  assert.strictEqual(exento.dias, null);
+  assert.strictEqual(CP.estadoDeCliente(clientes[2], '2026-10-20').clave, 'exento');
+  assert.strictEqual(CP.estadoDeCliente(clientes[0], '2026-10-20').clave, 'vencido');
+  assert.strictEqual(CP.estadoDeCliente(clientes[0], '2026-10-20').etiqueta, 'Vencido');
+  assert.strictEqual(CP.estadoCliente('2026-09-15', '2026-10-20').clave, 'vencido');
+});
+
+test('el pago de un exento se guarda y la mensualidad sugerida es 0', function () {
+  var data = {
+    clientes: [{
+      id: 'c1',
+      nombre: 'Ana',
+      promo: 'SI',
+      exento: 'SI',
+      proximo_vencimiento: '2026-09-15',
+      meses_pagados: 1
+    }],
+    dispositivos: [
+      { id: 'd1', cliente_id: 'c1' },
+      { id: 'd2', cliente_id: 'c1' }
+    ],
+    pagos: []
+  };
+  var res = CP.aplicarPago(data, {
+    cliente_id: 'c1',
+    fecha: '2026-10-20',
+    meses: 1,
+    registrado_por: 'Rosa'
+  });
+  assert.strictEqual(res.pago.monto, 0);
+  assert.strictEqual(res.pago.cubre_hasta, '2026-10-15');
+  assert.strictEqual(res.cliente.fecha_ultimo_pago, '2026-10-20');
+  assert.strictEqual(res.cliente.meses_pagados, 2);
+  assert.strictEqual(res.cliente.exento, 'SI');
+  assert.strictEqual(res.data.pagos.length, 1);
+  var conMonto = CP.aplicarPago(data, {
+    cliente_id: 'c1',
+    fecha: '2026-10-20',
+    meses: 1,
+    monto: 10,
+    registrado_por: 'Rosa'
+  });
+  assert.strictEqual(conMonto.pago.monto, 10);
+  assert.strictEqual(conMonto.cliente.proximo_vencimiento, '2026-10-15');
+});
+
 test('registrar pago guarda historial y mueve al cliente', function () {
   var data = {
     clientes: [{

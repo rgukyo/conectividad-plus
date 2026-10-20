@@ -30,6 +30,11 @@
     return s === 'SI' || s === 'S' || s === 'YES' || s === 'TRUE' || s === '1';
   }
 
+  function esExento(cliente) {
+    if (cliente && typeof cliente === 'object') return esPromo(cliente.exento);
+    return esPromo(cliente);
+  }
+
   function precioMensual(n, promo) {
     var equipos = parseInt(n, 10);
     if (!equipos || equipos < 0) equipos = 0;
@@ -123,6 +128,12 @@
     return { clave: 'al_corriente', etiqueta: 'Al corriente', dias: dias };
   }
 
+  function estadoDeCliente(cliente, now) {
+    if (esExento(cliente)) return { clave: 'exento', etiqueta: 'Exento', dias: null };
+    var fecha = cliente && typeof cliente === 'object' ? cliente.proximo_vencimiento : cliente;
+    return estadoCliente(fecha, now);
+  }
+
   function normalizarCelular(input) {
     var digits = String(input == null ? '' : input).replace(/\D/g, '');
     if (!digits) return { ok: false, digitos: '', error: 'Escribe el celular.' };
@@ -208,6 +219,7 @@
 
   function mensualidadCliente(cliente, dispositivos) {
     if (!cliente) return 0;
+    if (esExento(cliente)) return 0;
     return precioMensual(equiposDeCliente(dispositivos, cliente.id).length, cliente.promo);
   }
 
@@ -216,6 +228,7 @@
     var total = 0;
     var detalle = [];
     (clientes || []).forEach(function (cliente) {
+      if (esExento(cliente)) return;
       var estado = estadoCliente(cliente.proximo_vencimiento, hoy);
       var vencimiento = parseFecha(cliente.proximo_vencimiento);
       var incluir = estado.clave === 'vencido' || estado.clave === 'sin_fecha';
@@ -239,7 +252,7 @@
     var vencidos = 0;
     var porVencer = 0;
     clientes.forEach(function (cliente) {
-      var estado = estadoCliente(cliente.proximo_vencimiento, now);
+      var estado = estadoDeCliente(cliente, now);
       if (estado.clave === 'vencido') vencidos += 1;
       if (estado.clave === 'por_vencer') porVencer += 1;
     });
@@ -279,6 +292,9 @@
       area: String(input.area || '').trim(),
       promo: esPromo(input.promo) ? 'SI' : 'NO'
     };
+    if (campoPresente(input, 'exento')) {
+      cliente.exento = esPromo(input.exento) ? 'SI' : 'NO';
+    }
     if (campoPresente(input, 'fecha_ultimo_pago')) {
       var ultimo = String(input.fecha_ultimo_pago).trim();
       if (ultimo && !parseFecha(ultimo)) return { ok: false, error: 'La fecha del último pago no es válida.' };
@@ -310,7 +326,6 @@
     var tipo = String(input.tipo || '').trim();
     if (TIPOS.indexOf(tipo) < 0) return { ok: false, error: 'Elige el tipo de equipo.' };
     var modelo = String(input.modelo || '').trim();
-    if (!modelo) return { ok: false, error: 'Escribe el modelo.' };
     if (modelo.length > 120) return { ok: false, error: 'El modelo es demasiado largo.' };
     var mac = normalizarMac(input.mac);
     if (!mac.ok) return { ok: false, error: mac.error };
@@ -403,7 +418,24 @@
     return texto;
   }
 
+  function formularioSucio(campos) {
+    var lista = campos || [];
+    var i;
+    for (i = 0; i < lista.length; i++) {
+      var el = lista[i] || {};
+      var tipo = String(el.type || '').toLowerCase();
+      if (tipo === 'hidden' || tipo === 'button' || tipo === 'submit' || tipo === 'reset') continue;
+      if (tipo === 'checkbox' || tipo === 'radio') {
+        if (!!el.checked !== !!el.defaultChecked) return true;
+      } else if (String(el.value == null ? '' : el.value) !== String(el.defaultValue == null ? '' : el.defaultValue)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   function textoDias(estado) {
+    if (estado && estado.clave === 'exento') return 'No se cobra';
     if (!estado || estado.dias == null) return 'Sin fecha de vencimiento';
     if (estado.dias < 0) {
       var atraso = Math.abs(estado.dias);
@@ -421,6 +453,7 @@
     DIAS_POR_VENCER: DIAS_POR_VENCER,
     TIPOS: TIPOS,
     esPromo: esPromo,
+    esExento: esExento,
     precioMensual: precioMensual,
     desgloseMensual: desgloseMensual,
     parseFecha: parseFecha,
@@ -428,6 +461,7 @@
     inicioDeDia: inicioDeDia,
     cubreHasta: cubreHasta,
     estadoCliente: estadoCliente,
+    estadoDeCliente: estadoDeCliente,
     normalizarCelular: normalizarCelular,
     normalizarMac: normalizarMac,
     buscarMacDuplicada: buscarMacDuplicada,
@@ -445,6 +479,7 @@
     validarDispositivo: validarDispositivo,
     aplicarPago: aplicarPago,
     fusionarCliente: fusionarCliente,
+    formularioSucio: formularioSucio,
     textoSeguro: textoSeguro,
     CAMPOS_PRESERVAR: CAMPOS_PRESERVAR,
     textoDias: textoDias

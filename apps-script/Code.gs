@@ -1,5 +1,8 @@
 /**
  * Conectividad Plus — puente entre la app y el Google Sheet.
+ * Versión: 2. El modelo del equipo puede ir vacío. La columna exento va al final de Clientes
+ * (SI o NO, igual que promo) y se agrega sola si la hoja todavía no la tiene.
+ * Después de pegar este archivo hay que publicar una implementación nueva.
  *
  * Cómo publicarlo (también está en el README):
  * 1. En la hoja: Extensiones > Apps Script. Pega este archivo.
@@ -17,7 +20,7 @@ var PRECIO_EQUIPO = 30;
 var DESCUENTO_PAR = 10;
 var DIA_CORTE = 15;
 var TIPOS_ = ['Celular', 'Tablet', 'iPad', 'TV Smart', 'PC', 'Otro'];
-var HEADERS_CLIENTES = ['id', 'nombre', 'celular', 'area', 'promo', 'fecha_ultimo_pago', 'proximo_vencimiento', 'meses_pagados', 'notas'];
+var HEADERS_CLIENTES = ['id', 'nombre', 'celular', 'area', 'promo', 'fecha_ultimo_pago', 'proximo_vencimiento', 'meses_pagados', 'notas', 'exento'];
 var HEADERS_DISPOSITIVOS = ['id', 'cliente_id', 'tipo', 'modelo', 'mac', 'notas'];
 var HEADERS_PAGOS = ['id', 'cliente_id', 'fecha', 'monto', 'meses', 'cubre_hasta', 'registrado_por'];
 var CAMPOS_FECHA_ = {
@@ -213,7 +216,7 @@ function registrarPago_(req) {
   for (i = 0; i < equipos.length; i++) {
     if (String(equipos[i].cliente_id || '') === clienteId) n++;
   }
-  var mensual = precioMensual_(n, cliente.promo);
+  var mensual = esExento_(cliente) ? 0 : precioMensual_(n, cliente.promo);
   var monto;
   if (entrada.monto === '' || entrada.monto == null) monto = mensual * meses;
   else monto = Number(entrada.monto);
@@ -259,6 +262,9 @@ function normalizarCliente_(input) {
     area: area,
     promo: esPromo_(input.promo) ? 'SI' : 'NO'
   };
+  if (viene_(input, 'exento')) {
+    copiarSiViene_(cliente, input, 'exento', esPromo_(input.exento) ? 'SI' : 'NO');
+  }
   if (viene_(input, 'fecha_ultimo_pago')) {
     if (ultimoCrudo && !ultimo) throw new Error('La fecha del último pago no es válida.');
     copiarSiViene_(cliente, input, 'fecha_ultimo_pago', ultimo);
@@ -294,7 +300,6 @@ function normalizarDispositivo_(input) {
   var tipo = String(input.tipo || '').trim();
   if (TIPOS_.indexOf(tipo) < 0) throw new Error('Elige el tipo de equipo.');
   var modelo = String(input.modelo || '').trim();
-  if (!modelo) throw new Error('Escribe el modelo.');
   if (modelo.length > 120) throw new Error('El modelo es demasiado largo.');
   var mac = normalizarMac_(input.mac);
   if (!mac.ok) throw new Error(mac.error);
@@ -315,6 +320,11 @@ function esPromo_(promo) {
   var s = String(promo == null ? '' : promo).trim().toUpperCase();
   s = s.replace(/Á/g, 'A').replace(/É/g, 'E').replace(/Í/g, 'I').replace(/Ó/g, 'O').replace(/Ú/g, 'U');
   return s === 'SI' || s === 'S' || s === 'YES' || s === 'TRUE' || s === '1';
+}
+
+function esExento_(cliente) {
+  if (cliente && typeof cliente === 'object') return esPromo_(cliente.exento);
+  return esPromo_(cliente);
 }
 
 function precioMensual_(n, promo) {
@@ -437,9 +447,38 @@ function asegurarHoja_(ss, nombre, headers) {
     sh.getRange(1, 1, 1, headers.length).setValues([headers]);
     sh.setFrozenRows(1);
     sh.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+  } else {
+    agregarEncabezadosFaltantes_(sh, headers);
   }
   formatearHoja_(sh, headers);
   return sh;
+}
+
+function agregarEncabezadosFaltantes_(sh, headers) {
+  var lastCol = sh.getLastColumn();
+  if (lastCol < 1) return;
+  var actuales = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+  var nombres = [];
+  var i;
+  for (i = 0; i < actuales.length; i++) {
+    nombres.push(String(actuales[i] || '').trim().toLowerCase());
+  }
+  var faltan = [];
+  for (i = 0; i < headers.length; i++) {
+    var nombre = headers[i];
+    if (nombres.indexOf(String(nombre).toLowerCase()) >= 0) continue;
+    var anterioresOk = true;
+    var j;
+    for (j = 0; j < i; j++) {
+      if (nombres.indexOf(String(headers[j]).toLowerCase()) < 0) anterioresOk = false;
+    }
+    if (!anterioresOk) continue;
+    faltan.push(nombre);
+    nombres.push(String(nombre).toLowerCase());
+  }
+  if (!faltan.length) return;
+  sh.getRange(1, lastCol + 1, 1, faltan.length).setValues([faltan]);
+  sh.getRange(1, lastCol + 1, 1, faltan.length).setFontWeight('bold');
 }
 
 function filaVacia_(sh, headers) {

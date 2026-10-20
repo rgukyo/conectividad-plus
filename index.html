@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es-MX">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0c6b63">
+  <meta name="description" content="Conectividad Plus: clientes, equipos y pagos del servicio de internet.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Conectividad">
+  <title>Conectividad Plus</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <a class="marca" href="#/">
+        <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+          <rect width="32" height="32" rx="8" fill="#0c6b63"/>
+          <circle cx="16" cy="20" r="1.6" fill="#f6f1e7"/>
+          <path d="M11.2 16.6a6.6 6.6 0 0 1 9.6 0" fill="none" stroke="#f6f1e7" stroke-width="2" stroke-linecap="round"/>
+          <path d="M8.2 13.4a10.8 10.8 0 0 1 15.6 0" fill="none" stroke="#f6f1e7" stroke-width="2" stroke-linecap="round"/>
+          <path d="M22 7h6M25 4v6" stroke="#e7b15a" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span>Conectividad Plus</span>
+      </a>
+      <span id="modo" class="modo">Demo</span>
+    </header>
+    <div class="cuerpo">
+      <div id="avisos"></div>
+      <main id="vista">
+        <p class="vacio">Cargando…</p>
+      </main>
+    </div>
+    <nav class="tabbar" aria-label="Secciones">
+      <a href="#/" data-tab="inicio">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"/></svg>
+        Inicio
+      </a>
+      <a href="#/clientes" data-tab="clientes">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3zm6 1a2.5 2.5 0 1 0-2.5-2.5A2.5 2.5 0 0 0 15 12zM4 17c0-1.7 2.3-3 5-3s5 1.3 5 3v1H4zm11.6-2.8c.4 0 .8 0 1.2.1 1.5.4 2.7 1.4 2.7 2.5V18h-4.1v-.8c0-1-.5-1.9-1.3-2.5.4-.3.9-.5 1.5-.5z"/></svg>
+        Clientes
+      </a>
+      <a href="#/vencidos" data-tab="vencidos">
+        <span class="badge" id="badge-vencidos" hidden>0</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 2h2v2h6V2h2v2h3v18H4V4h3zm12 8H5v10h14zM8 12h2v2H8zm4 0h2v2h-2zm4 0h2v2h-2z"/></svg>
+        Vencidos
+      </a>
+      <a href="#/equipos" data-tab="equipos">
+        <span class="badge" id="badge-equipos" hidden>0</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm0 2v14h10V4zm4 16h2v-1h-2z"/></svg>
+        Equipos
+      </a>
+      <a href="#/ajustes" data-tab="ajustes">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.1 13.1a7.4 7.4 0 0 0 .1-1.1 7.4 7.4 0 0 0-.1-1.1l2-1.5-2-3.5-2.4 1a7.2 7.2 0 0 0-1.9-1.1l-.4-2.5h-4l-.4 2.5a7.2 7.2 0 0 0-1.9 1.1l-2.4-1-2 3.5 2 1.5a7.4 7.4 0 0 0-.1 1.1 7.4 7.4 0 0 0 .1 1.1l-2 1.5 2 3.5 2.4-1a7.2 7.2 0 0 0 1.9 1.1l.4 2.5h4l.4-2.5a7.2 7.2 0 0 0 1.9-1.1l2.4 1 2-3.5zM12 15.2A3.2 3.2 0 1 1 15.2 12 3.2 3.2 0 0 1 12 15.2z"/></svg>
+        Ajustes
+      </a>
+    </nav>
+  </div>
+  <div id="toast" class="toast" hidden role="status"></div>
+  <div id="modal"></div>
+  <noscript><p class="aviso bad">Activa JavaScript para usar Conectividad Plus.</p></noscript>
+  <script src="js/logic.js"></script>
+  <script src="js/demo-data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

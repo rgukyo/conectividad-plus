@@ -96,6 +96,25 @@ test('validar equipo normaliza la MAC', function () {
   assert.strictEqual(CP.validarDispositivo({ tipo: 'Laptop', modelo: 'X', mac: 'aabbccddeeff' }).ok, false);
 });
 
+test('un equipo sin modelo se puede guardar y sigue exigiendo la MAC', function () {
+  var vacio = CP.validarDispositivo({ tipo: 'TV Smart', modelo: '   ', mac: 'aa:bb:cc:dd:ee:10' }, []);
+  assert.strictEqual(vacio.ok, true);
+  assert.strictEqual(vacio.dispositivo.modelo, '');
+  assert.strictEqual(vacio.dispositivo.mac, 'AA-BB-CC-DD-EE-10');
+  assert.strictEqual(CP.validarDispositivo({ tipo: 'Celular', modelo: '', mac: '' }).ok, false);
+  var largo = new Array(122).join('a');
+  assert.strictEqual(CP.validarDispositivo({ tipo: 'Celular', modelo: largo, mac: 'aabbccddeeff' }).ok, false);
+  var app = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'utf8');
+  var linea = app.split('\n').filter(function (l) { return l.indexOf('name="modelo"') >= 0; })[0];
+  assert.ok(linea);
+  assert.strictEqual(linea.indexOf('required'), -1);
+  var script = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Code.gs'), 'utf8');
+  assert.ok(script.indexOf('Versión: 2') >= 0);
+  assert.strictEqual(script.indexOf('Escribe el modelo'), -1);
+  assert.ok(script.indexOf('El modelo es demasiado largo') >= 0);
+  assert.ok(script.indexOf('function normalizarMac_') >= 0);
+});
+
 test('el modo demostración trae los tres estados y equipos sin asignar', function () {
   require('../js/demo-data.js');
   var data = global.CPDemo.datosDemo(new Date('2026-10-20T12:00:00'));

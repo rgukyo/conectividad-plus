@@ -521,7 +521,7 @@
     });
     if (!lista.length) return '<p class="vacio">No hay equipos sin asignar.</p>';
     return lista.map(function (eq) {
-      return '<article class="card"><h3>' + esc(eq.tipo) + '</h3><p>' + esc(eq.modelo) + '</p>' +
+      return '<article class="card"><h3>' + esc(eq.tipo) + '</h3>' + htmlModelo(eq) +
         '<p class="mac num">' + esc(eq.mac) + '</p>' +
         (eq.notas ? '<p class="muted">' + esc(eq.notas) + '</p>' : '') +
         '<label class="campo">Asignar a<select data-action="asignar" data-id="' + esc(eq.id) + '"' + (state.soloLectura ? ' disabled' : '') + '>' +
@@ -602,7 +602,7 @@
       '<input type="hidden" name="registro_id" value="' + esc(equipo.id) + '">' +
       '<input type="hidden" name="cliente_id" value="' + esc(equipo.cliente_id) + '">' +
       '<div class="campo"><span>Tipo</span>' + htmlTipos(equipo.tipo) + '</div>' +
-      '<label class="campo">Modelo<input name="modelo" required maxlength="120" value="' + esc(equipo.modelo) + '" placeholder="Samsung A14"></label>' +
+      '<label class="campo">Modelo, si lo sabes<input name="modelo" maxlength="120" value="' + esc(equipo.modelo) + '" placeholder="Opcional. Samsung A14"></label>' +
       '<label class="campo">MAC<input name="mac" required autocapitalize="characters" placeholder="AA-BB-CC-DD-EE-FF" value="' + esc(equipo.mac) + '"></label>' +
       '<p class="ayuda" id="mac-ayuda">Se guarda como AA-BB-CC-DD-EE-FF.</p>' +
       '<label class="campo">Notas<textarea name="notas" maxlength="2000">' + esc(equipo.notas) + '</textarea></label>' +
@@ -739,8 +739,21 @@
       '<p class="total"><span>Total al mes</span><strong class="num">' + esc(dinero(d.total)) + '</strong></p></section>';
   }
 
+  function nombreEquipo(eq) {
+    if (!eq) return 'este equipo';
+    var modelo = String(eq.modelo || '').trim();
+    if (modelo) return modelo;
+    if (eq.tipo) return eq.tipo;
+    return 'este equipo';
+  }
+
+  function htmlModelo(eq) {
+    var modelo = String(eq && eq.modelo || '').trim();
+    return modelo ? '<p>' + esc(modelo) + '</p>' : '';
+  }
+
   function htmlEquipoCard(eq, href) {
-    return '<article class="card"><h3>' + esc(eq.tipo) + '</h3><p>' + esc(eq.modelo) + '</p>' +
+    return '<article class="card"><h3>' + esc(eq.tipo) + '</h3>' + htmlModelo(eq) +
       '<p class="mac num">' + esc(eq.mac) + '</p>' +
       (eq.notas ? '<p class="muted">' + esc(eq.notas) + '</p>' : '') +
       '<div class="fila-botones"><a class="btn ghost" href="' + href + '">Editar</a>' +
@@ -978,7 +991,7 @@
       var otro = valid.duplicado;
       var dueno = buscarCliente(otro.cliente_id);
       state.confirm = {
-        texto: 'Esta MAC ya está en ' + otro.modelo + (dueno ? ' (' + dueno.nombre + ')' : ' (sin asignar)') + '. ¿La guardas de todos modos?',
+        texto: 'Esta MAC ya está en ' + nombreEquipo(otro) + (dueno ? ' (' + dueno.nombre + ')' : ' (sin asignar)') + '. ¿La guardas de todos modos?',
         ok: 'Guardar de todos modos',
         run: function () { return persistirEquipo(valid.dispositivo); }
       };
@@ -1108,7 +1121,7 @@
   function pedirBorrar(id) {
     var eq = buscarEquipo(id);
     state.confirm = {
-      texto: '¿Borrar ' + (eq ? eq.modelo : 'este equipo') + '? Esta acción no se deshace.',
+      texto: '¿Borrar ' + nombreEquipo(eq) + '? Esta acción no se deshace.',
       ok: 'Borrar',
       peligro: true,
       run: function () { return borrarEquipo(id); }

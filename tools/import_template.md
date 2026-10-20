@@ -35,7 +35,7 @@ c_ejemplo_2,Otra Persona,5500000092,Otra Colonia,SI,2026-10-10,2026-11-15,3,Dato
 | id | Puede ir vacío, o algo como `d1`. |
 | cliente_id | El `id` del cliente, o vacío. |
 | tipo | Uno de: `Celular`, `Tablet`, `iPad`, `TV Smart`, `PC`, `Otro`. |
-| modelo | Texto, por ejemplo `Samsung A14`. |
+| modelo | Opcional. Puede ir vacío. Si lo tienes, un texto como `Samsung A14`. |
 | mac | 12 hexadecimales. La app la guarda como `AA-BB-CC-DD-EE-FF`. |
 | notas | Texto libre. |
 

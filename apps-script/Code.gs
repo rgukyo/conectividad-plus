@@ -1,5 +1,6 @@
 /**
  * Conectividad Plus — puente entre la app y el Google Sheet.
+ * Versión: 2. El modelo del equipo puede ir vacío. Después de pegar este archivo hay que publicar una implementación nueva.
  *
  * Cómo publicarlo (también está en el README):
  * 1. En la hoja: Extensiones > Apps Script. Pega este archivo.
@@ -294,7 +295,6 @@ function normalizarDispositivo_(input) {
   var tipo = String(input.tipo || '').trim();
   if (TIPOS_.indexOf(tipo) < 0) throw new Error('Elige el tipo de equipo.');
   var modelo = String(input.modelo || '').trim();
-  if (!modelo) throw new Error('Escribe el modelo.');
   if (modelo.length > 120) throw new Error('El modelo es demasiado largo.');
   var mac = normalizarMac_(input.mac);
   if (!mac.ok) throw new Error(mac.error);

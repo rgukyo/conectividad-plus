@@ -310,7 +310,6 @@
     var tipo = String(input.tipo || '').trim();
     if (TIPOS.indexOf(tipo) < 0) return { ok: false, error: 'Elige el tipo de equipo.' };
     var modelo = String(input.modelo || '').trim();
-    if (!modelo) return { ok: false, error: 'Escribe el modelo.' };
     if (modelo.length > 120) return { ok: false, error: 'El modelo es demasiado largo.' };
     var mac = normalizarMac(input.mac);
     if (!mac.ok) return { ok: false, error: mac.error };

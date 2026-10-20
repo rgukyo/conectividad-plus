@@ -75,7 +75,15 @@ button { cursor: pointer; }
   letter-spacing: -0.03em;
 }
 
-.logo { width: 32px; height: 32px; flex: none; }
+.logo { width: 32px; height: 32px; flex: none; border-radius: 8px; }
+
+.logo-inicio {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 16px;
+  margin: 4px 0 12px;
+}
 
 .modo {
   font-size: 0.75rem;

@@ -29,11 +29,22 @@ test('el mismo día del vencimiento todavía está al corriente', function () {
   assert.strictEqual(CP.cubreHasta('2026-10-15', '2026-10-15', 1), '2026-11-15');
 });
 
-test('si ya venció, el corte es el 15 del mes siguiente al pago', function () {
-  assert.strictEqual(CP.cubreHasta('2026-09-15', '2026-10-20', 1), '2026-11-15');
-  assert.strictEqual(CP.cubreHasta('2026-08-15', '2026-10-01', 1), '2026-11-15');
+test('un pago atrasado avanza desde el vencimiento anterior, no desde la fecha del pago', function () {
+  assert.strictEqual(CP.cubreHasta('2026-09-15', '2026-10-01', 1), '2026-10-15');
+  assert.strictEqual(CP.estadoCliente('2026-10-15', '2026-10-20').clave, 'vencido');
+  assert.strictEqual(CP.cubreHasta('2026-09-15', '2026-10-20', 1), '2026-10-15');
+  assert.strictEqual(CP.cubreHasta('2026-08-15', '2026-10-16', 1), '2026-09-15');
+  assert.strictEqual(CP.estadoCliente(CP.cubreHasta('2026-08-15', '2026-10-16', 1), '2026-10-16').clave, 'vencido');
+  assert.strictEqual(CP.cubreHasta('2026-08-15', '2026-10-01', 1), '2026-09-15');
   assert.strictEqual(CP.cubreHasta('2026-10-15', '2026-10-16', 1), '2026-11-15');
-  assert.strictEqual(CP.cubreHasta('2026-09-15', '2026-10-20', 2), '2026-12-15');
+  assert.strictEqual(CP.cubreHasta('2026-09-15', '2026-10-20', 2), '2026-11-15');
+});
+
+test('una fecha que no es día 15 se acomoda al 15 de ese mismo mes', function () {
+  assert.strictEqual(CP.cubreHasta('2026-09-20', '2026-10-01', 1), '2026-10-15');
+  assert.strictEqual(CP.cubreHasta('2026-09-01', '2026-10-16', 1), '2026-10-15');
+  assert.strictEqual(CP.cubreHasta('2026-09-20', '2026-10-01', 2), '2026-11-15');
+  assert.strictEqual(CP.cubreHasta('2026-12-03', '2027-01-02', 1), '2027-01-15');
 });
 
 test('sin fecha previa se usa el mes siguiente al pago', function () {
@@ -41,6 +52,8 @@ test('sin fecha previa se usa el mes siguiente al pago', function () {
   assert.strictEqual(CP.cubreHasta('', '2026-10-05', 1), '2026-11-15');
   assert.strictEqual(CP.cubreHasta(null, '2026-01-05', 1), '2026-02-15');
   assert.strictEqual(CP.cubreHasta('', '2026-12-20', 1), '2027-01-15');
+  assert.strictEqual(CP.cubreHasta('', '2026-10-20', 2), '2026-12-15');
+  assert.strictEqual(CP.cubreHasta(undefined, '2026-10-20', 1), '2026-11-15');
 });
 
 test('meses vacío o cero cuenta como un mes', function () {
@@ -130,7 +143,7 @@ test('registrar pago guarda historial y mueve al cliente', function () {
   assert.strictEqual(data.clientes[0].meses_pagados, 2);
 });
 
-test('un cliente vencido cobra hacia adelante y respeta un monto distinto', function () {
+test('un pago atrasado de dos meses sale del vencimiento anterior y respeta un monto distinto', function () {
   var data = {
     clientes: [{ id: 'c1', promo: 'NO', proximo_vencimiento: '2026-08-15', meses_pagados: 1 }],
     dispositivos: [{ id: 'd1', cliente_id: 'c1' }],
@@ -143,7 +156,8 @@ test('un cliente vencido cobra hacia adelante y respeta un monto distinto', func
     monto: 40,
     registrado_por: 'Luis'
   });
-  assert.strictEqual(res.pago.cubre_hasta, '2026-12-15');
+  assert.strictEqual(res.pago.cubre_hasta, '2026-10-15');
+  assert.strictEqual(CP.estadoCliente(res.pago.cubre_hasta, '2026-10-20').clave, 'vencido');
   assert.strictEqual(res.pago.monto, 40);
   assert.strictEqual(res.cliente.meses_pagados, 3);
 });

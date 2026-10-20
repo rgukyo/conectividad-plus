@@ -54,13 +54,15 @@ Quien tenga esa URL y la clave puede leer y modificar la hoja. Por eso la clave 
 
 ## Día 15
 
-El corte es el día 15. Al registrar un pago:
+El corte es siempre el día 15. Al registrar un pago, los meses se suman al vencimiento anterior, no a la fecha en que pagó.
 
-- Si sigue al corriente, queda cubierto hasta el día 15 del mes siguiente a su vencimiento, más los meses extra.
-- Si ya venció o no tiene fecha, queda cubierto hasta el día 15 del mes siguiente a la fecha del pago, más los meses extra.
-- Un mes es el valor de inicio. Dos meses suman un mes más, y así.
+- Si ya hay próximo vencimiento, el nuevo es el día 15 de ese mes más los meses pagados. Una fecha que no cae en 15 se acomoda al 15 de ese mismo mes, y de ahí se cuentan los meses.
+- Debía el 15/09 y pagó el 01/10 un mes → queda el 15/10. Si ese día ya pasó, sigue vencido.
+- Debía el 15/08 y pagó el 16/10 un mes → queda el 15/09.
+- Debía el 20/09 y pagó un mes → queda el 15/10.
+- Si es el primer pago y no hay fecha, queda el 15 del mes siguiente a la fecha del pago. Un mes extra corre un mes más.
 
-Un pago atrasado no rellena los meses ya vencidos: corre hacia adelante. Después de guardarlo se abre WhatsApp con el recado de gracias.
+Después de guardarlo se abre WhatsApp con el recado de gracias.
 
 En la lista, **Por vencer** significa que faltan 5 días o menos. **Vencido** es cuando la fecha ya pasó.
 

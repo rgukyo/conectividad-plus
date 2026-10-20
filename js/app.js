@@ -494,7 +494,7 @@
     return htmlVolver(nuevo ? '#/clientes' : '#/clientes/' + seg(cliente.id), 'Volver') +
       '<h1>' + (nuevo ? 'Nuevo cliente' : 'Editar cliente') + '</h1>' +
       '<form id="form-cliente">' +
-      '<input type="hidden" name="id" value="' + esc(cliente.id) + '">' +
+      '<input type="hidden" name="registro_id" value="' + esc(cliente.id) + '">' +
       '<label class="campo">Nombre<input name="nombre" required maxlength="120" value="' + esc(cliente.nombre) + '"></label>' +
       '<label class="campo">Celular<input name="celular" type="tel" inputmode="tel" required maxlength="20" placeholder="10 dígitos" value="' + esc(cliente.celular) + '"></label>' +
       '<label class="campo">Área<input name="area" maxlength="120" list="lista-areas" placeholder="Colonia o zona" value="' + esc(cliente.area) + '"></label>' +
@@ -522,7 +522,7 @@
       '<h1>' + (nuevo ? 'Nuevo equipo' : 'Editar equipo') + '</h1>' +
       (dueno ? '<p class="muted">De ' + esc(dueno.nombre) + '</p>' : '<p class="muted">Quedará sin asignar hasta que elijas cliente.</p>') +
       '<form id="form-equipo">' +
-      '<input type="hidden" name="id" value="' + esc(equipo.id) + '">' +
+      '<input type="hidden" name="registro_id" value="' + esc(equipo.id) + '">' +
       '<input type="hidden" name="cliente_id" value="' + esc(equipo.cliente_id) + '">' +
       '<div class="campo"><span>Tipo</span>' + htmlTipos(equipo.tipo) + '</div>' +
       '<label class="campo">Modelo<input name="modelo" required maxlength="120" value="' + esc(equipo.modelo) + '" placeholder="Samsung A14"></label>' +
@@ -777,19 +777,19 @@
     }
   }
 
+  function idFormulario(form) {
+    return form && form.getAttribute ? (form.getAttribute('id') || '') : '';
+  }
+
   function onSubmit(e) {
     var form = e.target;
-    if (form.id === 'form-cliente') {
-      e.preventDefault();
-      guardarClienteDesde(form);
-    } else if (form.id === 'form-equipo') {
-      e.preventDefault();
-      guardarEquipoDesde(form, false);
-    } else if (form.id === 'form-pago') {
-      e.preventDefault();
-      guardarPagoDesde(form);
-    } else if (form.id === 'form-ajustes') {
-      e.preventDefault();
+    var id = idFormulario(form);
+    if (id !== 'form-cliente' && id !== 'form-equipo' && id !== 'form-pago' && id !== 'form-ajustes') return;
+    e.preventDefault();
+    if (id === 'form-cliente') guardarClienteDesde(form);
+    else if (id === 'form-equipo') guardarEquipoDesde(form, false);
+    else if (id === 'form-pago') guardarPagoDesde(form);
+    else if (id === 'form-ajustes') {
       state.settings = leerAjustesForm();
       guardarSettings();
       cargar().then(function () {
@@ -816,7 +816,7 @@
       var norm = CP.normalizarMac(el.value);
       if (ayuda) ayuda.textContent = norm.ok ? norm.mac : 'Se guarda como AA-BB-CC-DD-EE-FF.';
     }
-    if (!el.form || el.form.id !== 'form-pago') return;
+    if (!el.form || idFormulario(el.form) !== 'form-pago') return;
     if (el.name === 'monto' && e.isTrusted) state.montoManual = true;
     if ((el.name === 'meses' || el.name === 'fecha') && !state.montoManual) rellenarMonto();
     if (el.name === 'meses' || el.name === 'fecha' || el.name === 'monto') actualizarPreviewPago();
@@ -834,7 +834,7 @@
       });
       return;
     }
-    if (el.form && el.form.id === 'form-pago' && (el.name === 'fecha' || el.name === 'meses')) {
+    if (el.form && idFormulario(el.form) === 'form-pago' && (el.name === 'fecha' || el.name === 'meses')) {
       if (!state.montoManual) rellenarMonto();
       actualizarPreviewPago();
     }
@@ -843,7 +843,7 @@
   function guardarClienteDesde(form) {
     if (state.guardando) return;
     if (rechazoLectura()) return;
-    var id = val(form, 'id') || nuevoId('c');
+    var id = val(form, 'registro_id') || nuevoId('c');
     var valid = CP.validarCliente({
       id: id,
       nombre: val(form, 'nombre'),
@@ -873,7 +873,7 @@
   function guardarEquipoDesde(form, forzar) {
     if (state.guardando) return;
     if (rechazoLectura()) return;
-    var id = val(form, 'id') || nuevoId('d');
+    var id = val(form, 'registro_id') || nuevoId('d');
     var tipo = '';
     var radios = form.querySelectorAll('input[name="tipo"]');
     radios.forEach(function (radio) { if (radio.checked) tipo = radio.value; });
@@ -956,15 +956,17 @@
     var guardando = activo !== false;
     boton.disabled = guardando || state.soloLectura;
     if (guardando) boton.textContent = 'Guardando…';
-    else if (form.id === 'form-pago') boton.textContent = 'Guardar pago y abrir WhatsApp';
+    else if (idFormulario(form) === 'form-pago') boton.textContent = 'Guardar pago y abrir WhatsApp';
     else boton.textContent = 'Guardar';
   }
 
   function persistirCliente(cliente) {
     if (state.modo === 'demo') {
-      state.data.clientes = upsert(state.data.clientes, cliente);
+      var guardado = CP.fusionarCliente(buscarCliente(cliente.id), cliente);
+      if (!guardado.id) guardado.id = cliente.id;
+      state.data.clientes = upsert(state.data.clientes, guardado);
       guardarDemo();
-      return Promise.resolve(cliente);
+      return Promise.resolve(guardado);
     }
     return api('upsertCliente', { cliente: cliente }).then(function (res) {
       var guardado = normalizarRemoto({ clientes: [res.cliente] }).clientes[0];

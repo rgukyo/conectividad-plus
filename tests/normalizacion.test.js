@@ -123,6 +123,69 @@ test('el modo demostración trae los tres estados y equipos sin asignar', functi
   });
 });
 
+test('guardar un cliente sin fechas ni notas no las borra', function () {
+  var actual = {
+    id: 'c1',
+    nombre: 'Ana',
+    fecha_ultimo_pago: '2026-09-15',
+    proximo_vencimiento: '2026-10-15',
+    meses_pagados: 4,
+    notas: 'Portón azul'
+  };
+  var parcial = CP.validarCliente({ nombre: 'Ana Ruiz', celular: '5500000001', promo: 'NO' });
+  assert.strictEqual(parcial.ok, true);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(parcial.cliente, 'fecha_ultimo_pago'), false);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(parcial.cliente, 'proximo_vencimiento'), false);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(parcial.cliente, 'meses_pagados'), false);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(parcial.cliente, 'notas'), false);
+  var fusion = CP.fusionarCliente(actual, parcial.cliente);
+  assert.strictEqual(fusion.nombre, 'Ana Ruiz');
+  assert.strictEqual(fusion.fecha_ultimo_pago, '2026-09-15');
+  assert.strictEqual(fusion.proximo_vencimiento, '2026-10-15');
+  assert.strictEqual(fusion.meses_pagados, 4);
+  assert.strictEqual(fusion.notas, 'Portón azul');
+  var conNulos = CP.fusionarCliente(actual, {
+    nombre: 'Ana',
+    fecha_ultimo_pago: null,
+    proximo_vencimiento: null,
+    meses_pagados: null,
+    notas: null
+  });
+  assert.strictEqual(conNulos.fecha_ultimo_pago, '2026-09-15');
+  assert.strictEqual(conNulos.proximo_vencimiento, '2026-10-15');
+  assert.strictEqual(conNulos.meses_pagados, 4);
+  assert.strictEqual(conNulos.notas, 'Portón azul');
+  var limpia = CP.fusionarCliente(actual, { notas: '' });
+  assert.strictEqual(limpia.notas, '');
+  assert.strictEqual(limpia.meses_pagados, 4);
+});
+
+test('el texto que empieza con fórmula o con salto se marca para la hoja', function () {
+  assert.strictEqual(CP.textoSeguro('=1+1'), "'=1+1");
+  assert.strictEqual(CP.textoSeguro('+cmd'), "'+cmd");
+  assert.strictEqual(CP.textoSeguro('-1'), "'-1");
+  assert.strictEqual(CP.textoSeguro('@suma'), "'@suma");
+  assert.strictEqual(CP.textoSeguro('\t=1+1'), "'=1+1");
+  assert.strictEqual(CP.textoSeguro('\rnota'), "'nota");
+  assert.strictEqual(CP.textoSeguro('\nnota'), "'nota");
+  assert.strictEqual(CP.textoSeguro('  hola'), 'hola');
+  assert.strictEqual(CP.textoSeguro('Ana'), 'Ana');
+});
+
+test('los formularios no dejan que el campo id tape el id del form', function () {
+  var app = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(app.indexOf("getAttribute('id')") >= 0);
+  assert.ok(app.indexOf('name="registro_id"') >= 0);
+  assert.strictEqual(app.indexOf('name="id"'), -1);
+  assert.strictEqual(/form\.id\s*===/.test(app), false);
+  var enviar = app.slice(app.indexOf('function onSubmit'));
+  var freno = enviar.indexOf('e.preventDefault()');
+  assert.ok(freno >= 0);
+  assert.ok(freno < enviar.indexOf('guardarClienteDesde'));
+  assert.ok(freno < enviar.indexOf('guardarEquipoDesde'));
+  assert.ok(freno < enviar.indexOf('guardarPagoDesde'));
+});
+
 test('el script de la hoja trae la clave, el candado y las mismas reglas', function () {
   var src = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Code.gs'), 'utf8');
   assert.ok(src.indexOf('function doGet') >= 0);
@@ -139,6 +202,16 @@ test('el script de la hoja trae la clave, el candado y las mismas reglas', funct
   assert.ok(src.indexOf('PRECIO_EQUIPO * equipos - DESCUENTO_PAR * Math.floor(equipos / 2)') >= 0);
   assert.ok(src.indexOf('DIA_CORTE') >= 0);
   assert.ok(src.indexOf('text/plain') >= 0 || src.indexOf('MimeType.JSON') >= 0);
+  assert.ok(src.indexOf("action !== 'list'") >= 0);
+  assert.ok(src.indexOf('Las escrituras van por POST') >= 0);
+  assert.ok(src.indexOf('copiarSiViene_') >= 0);
+  assert.ok(src.indexOf('[\\t\\r\\n]') >= 0);
+  assert.ok(src.indexOf('input[campo] !== null') >= 0);
+  var corte = 'vencimiento.getFullYear(), vencimiento.getMonth() + n, DIA_CORTE';
+  assert.ok(src.indexOf(corte) >= 0);
+  var logic = fs.readFileSync(path.join(__dirname, '..', 'js', 'logic.js'), 'utf8');
+  assert.ok(logic.indexOf(corte) >= 0);
+  assert.ok(fs.existsSync(path.join(__dirname, '..', 'favicon.ico')));
 });
 
 if (require.main === module) {

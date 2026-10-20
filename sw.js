@@ -1,6 +1,7 @@
-var CACHE = 'conectividad-plus-v1';
+var CACHE = 'conectividad-plus-v2';
 var ARCHIVOS = [
   './index.html',
+  './favicon.ico',
   './css/styles.css',
   './js/logic.js',
   './js/demo-data.js',

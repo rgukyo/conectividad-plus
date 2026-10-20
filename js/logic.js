@@ -99,9 +99,11 @@
     var n = parseInt(meses, 10);
     if (!n || n < 1) n = 1;
     var vencimiento = parseFecha(proximoVencimiento);
-    var sigueAlCorriente = !!(vencimiento && vencimiento.getTime() >= pago.getTime());
-    var base = sigueAlCorriente ? vencimiento : pago;
-    return formatISO(new Date(base.getFullYear(), base.getMonth() + n, DIA_CORTE));
+    if (!vencimiento) {
+      return formatISO(new Date(pago.getFullYear(), pago.getMonth() + n, DIA_CORTE));
+    }
+    // El día que no es 15 se acomoda al 15 de ese mismo mes, y de ahí se suman los meses.
+    return formatISO(new Date(vencimiento.getFullYear(), vencimiento.getMonth() + n, DIA_CORTE));
   }
 
   function diasEntre(desde, hasta) {
@@ -270,31 +272,37 @@
     if (nombre.length > 120) return { ok: false, error: 'El nombre es demasiado largo.' };
     var celular = normalizarCelular(input.celular);
     if (!celular.ok) return { ok: false, error: celular.error };
-    var ultimo = String(input.fecha_ultimo_pago || '').trim();
-    var proximo = String(input.proximo_vencimiento || '').trim();
-    if (ultimo && !parseFecha(ultimo)) return { ok: false, error: 'La fecha del último pago no es válida.' };
-    if (proximo && !parseFecha(proximo)) return { ok: false, error: 'La fecha de vencimiento no es válida.' };
-    var meses = String(input.meses_pagados == null ? '' : input.meses_pagados).trim();
-    var mesesNum = meses === '' ? 0 : parseInt(meses, 10);
-    if (!isFinite(mesesNum) || mesesNum < 0) {
-      return { ok: false, error: 'Los meses pagados no son válidos.' };
-    }
-    var notas = String(input.notas || '').trim();
-    if (notas.length > 2000) return { ok: false, error: 'Las notas son demasiado largas.' };
-    return {
-      ok: true,
-      cliente: {
-        id: String(input.id || '').trim(),
-        nombre: nombre,
-        celular: celular.digitos,
-        area: String(input.area || '').trim(),
-        promo: esPromo(input.promo) ? 'SI' : 'NO',
-        fecha_ultimo_pago: ultimo ? formatISO(parseFecha(ultimo)) : '',
-        proximo_vencimiento: proximo ? formatISO(parseFecha(proximo)) : '',
-        meses_pagados: mesesNum,
-        notas: notas
-      }
+    var cliente = {
+      id: String(input.id || '').trim(),
+      nombre: nombre,
+      celular: celular.digitos,
+      area: String(input.area || '').trim(),
+      promo: esPromo(input.promo) ? 'SI' : 'NO'
     };
+    if (campoPresente(input, 'fecha_ultimo_pago')) {
+      var ultimo = String(input.fecha_ultimo_pago).trim();
+      if (ultimo && !parseFecha(ultimo)) return { ok: false, error: 'La fecha del último pago no es válida.' };
+      cliente.fecha_ultimo_pago = ultimo ? formatISO(parseFecha(ultimo)) : '';
+    }
+    if (campoPresente(input, 'proximo_vencimiento')) {
+      var proximo = String(input.proximo_vencimiento).trim();
+      if (proximo && !parseFecha(proximo)) return { ok: false, error: 'La fecha de vencimiento no es válida.' };
+      cliente.proximo_vencimiento = proximo ? formatISO(parseFecha(proximo)) : '';
+    }
+    if (campoPresente(input, 'meses_pagados')) {
+      var meses = String(input.meses_pagados).trim();
+      var mesesNum = meses === '' ? 0 : parseInt(meses, 10);
+      if (!isFinite(mesesNum) || mesesNum < 0) {
+        return { ok: false, error: 'Los meses pagados no son válidos.' };
+      }
+      cliente.meses_pagados = mesesNum;
+    }
+    if (campoPresente(input, 'notas')) {
+      var notas = String(input.notas).trim();
+      if (notas.length > 2000) return { ok: false, error: 'Las notas son demasiado largas.' };
+      cliente.notas = notas;
+    }
+    return { ok: true, cliente: cliente };
   }
 
   function validarDispositivo(input, dispositivos) {
@@ -367,6 +375,34 @@
     return { data: next, pago: pago, cliente: Object.assign({}, cliente) };
   }
 
+  var CAMPOS_PRESERVAR = ['fecha_ultimo_pago', 'proximo_vencimiento', 'meses_pagados', 'notas'];
+
+  function campoPresente(input, campo) {
+    return !!input && Object.prototype.hasOwnProperty.call(input, campo) && input[campo] !== undefined && input[campo] !== null;
+  }
+
+  function fusionarCliente(actual, cambios) {
+    var base = Object.assign({}, actual || {});
+    var origen = cambios || {};
+    Object.keys(origen).forEach(function (campo) {
+      if (!campoPresente(origen, campo)) return;
+      base[campo] = origen[campo];
+    });
+    CAMPOS_PRESERVAR.forEach(function (campo) {
+      if (!campoPresente(origen, campo) && actual && Object.prototype.hasOwnProperty.call(actual, campo)) {
+        base[campo] = actual[campo];
+      }
+    });
+    return base;
+  }
+
+  function textoSeguro(value) {
+    var crudo = String(value == null ? '' : value);
+    var texto = crudo.replace(/^[\t\r\n]+/, '').trim();
+    if (/^[=+\-@]/.test(texto) || /^[\t\r\n]/.test(crudo)) return "'" + texto;
+    return texto;
+  }
+
   function textoDias(estado) {
     if (!estado || estado.dias == null) return 'Sin fecha de vencimiento';
     if (estado.dias < 0) {
@@ -408,6 +444,9 @@
     validarCliente: validarCliente,
     validarDispositivo: validarDispositivo,
     aplicarPago: aplicarPago,
+    fusionarCliente: fusionarCliente,
+    textoSeguro: textoSeguro,
+    CAMPOS_PRESERVAR: CAMPOS_PRESERVAR,
     textoDias: textoDias
   };
 });

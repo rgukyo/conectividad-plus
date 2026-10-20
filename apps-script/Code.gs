@@ -29,7 +29,11 @@ var CAMPOS_FECHA_ = {
 
 function doGet(e) {
   return responder_(function () {
-    return despachar_((e && e.parameter) || {});
+    var params = (e && e.parameter) || {};
+    var action = String(params.action || 'list').trim();
+    if (action !== 'list') throw new Error('Solo se puede consultar con GET. Las escrituras van por POST.');
+    params.action = 'list';
+    return despachar_(params);
   });
 }
 
@@ -246,25 +250,43 @@ function normalizarCliente_(input) {
   var proximoCrudo = String(input.proximo_vencimiento || '').trim();
   var ultimo = ultimoCrudo ? valorFecha_(input.fecha_ultimo_pago) : '';
   var proximo = proximoCrudo ? valorFecha_(input.proximo_vencimiento) : '';
-  if (ultimoCrudo && !ultimo) throw new Error('La fecha del último pago no es válida.');
-  if (proximoCrudo && !proximo) throw new Error('La fecha de vencimiento no es válida.');
-  var meses = input.meses_pagados === '' || input.meses_pagados == null ? 0 : parseInt(input.meses_pagados, 10);
-  if (!isFinite(meses) || meses < 0) throw new Error('Los meses pagados no son válidos.');
   var area = String(input.area || '').trim();
-  var notas = String(input.notas || '').trim();
   if (area.length > 120) throw new Error('El área es demasiado larga.');
-  if (notas.length > 2000) throw new Error('Las notas son demasiado largas.');
-  return {
+  var cliente = {
     id: String(input.id || '').trim(),
     nombre: nombre,
     celular: cel.digitos,
     area: area,
-    promo: esPromo_(input.promo) ? 'SI' : 'NO',
-    fecha_ultimo_pago: ultimo,
-    proximo_vencimiento: proximo,
-    meses_pagados: meses,
-    notas: notas
+    promo: esPromo_(input.promo) ? 'SI' : 'NO'
   };
+  if (viene_(input, 'fecha_ultimo_pago')) {
+    if (ultimoCrudo && !ultimo) throw new Error('La fecha del último pago no es válida.');
+    copiarSiViene_(cliente, input, 'fecha_ultimo_pago', ultimo);
+  }
+  if (viene_(input, 'proximo_vencimiento')) {
+    if (proximoCrudo && !proximo) throw new Error('La fecha de vencimiento no es válida.');
+    copiarSiViene_(cliente, input, 'proximo_vencimiento', proximo);
+  }
+  if (viene_(input, 'meses_pagados')) {
+    var meses = input.meses_pagados === '' || input.meses_pagados == null ? 0 : parseInt(input.meses_pagados, 10);
+    if (!isFinite(meses) || meses < 0) throw new Error('Los meses pagados no son válidos.');
+    copiarSiViene_(cliente, input, 'meses_pagados', meses);
+  }
+  if (viene_(input, 'notas')) {
+    var notas = String(input.notas || '').trim();
+    if (notas.length > 2000) throw new Error('Las notas son demasiado largas.');
+    copiarSiViene_(cliente, input, 'notas', notas);
+  }
+  return cliente;
+}
+
+function viene_(input, campo) {
+  return !!input && Object.prototype.hasOwnProperty.call(input, campo) && input[campo] !== undefined && input[campo] !== null;
+}
+
+function copiarSiViene_(destino, input, campo, valor) {
+  if (!viene_(input, campo)) return;
+  destino[campo] = valor;
 }
 
 function normalizarDispositivo_(input) {
@@ -336,9 +358,10 @@ function cubreHasta_(proximoVencimiento, fechaPago, meses) {
   var n = parseInt(meses, 10);
   if (!n || n < 1) n = 1;
   var vencimiento = parseFecha_(proximoVencimiento);
-  var sigue = vencimiento && vencimiento.getTime() >= pago.getTime();
-  var base = sigue ? vencimiento : pago;
-  return formatISO_(new Date(base.getFullYear(), base.getMonth() + n, DIA_CORTE));
+  if (!vencimiento) {
+    return formatISO_(new Date(pago.getFullYear(), pago.getMonth() + n, DIA_CORTE));
+  }
+  return formatISO_(new Date(vencimiento.getFullYear(), vencimiento.getMonth() + n, DIA_CORTE));
 }
 
 function normalizarCelular_(input) {
@@ -376,8 +399,9 @@ function fechaACelda_(iso) {
 }
 
 function textoSeguro_(value) {
-  var texto = String(value == null ? '' : value).trim();
-  if (/^[=+\-@]/.test(texto)) return "'" + texto;
+  var crudo = String(value == null ? '' : value);
+  var texto = crudo.replace(/^[\t\r\n]+/, '').trim();
+  if (/^[=+\-@]/.test(texto) || /^[\t\r\n]/.test(crudo)) return "'" + texto;
   return texto;
 }
 
@@ -484,7 +508,8 @@ function guardarObjeto_(sh, headers, obj) {
     var i;
     for (i = 0; i < headers.length; i++) {
       var campo = headers[i];
-      mezclado[campo] = Object.prototype.hasOwnProperty.call(obj, campo) && obj[campo] !== undefined ? obj[campo] : actual[campo];
+      var presente = Object.prototype.hasOwnProperty.call(obj, campo) && obj[campo] !== undefined && obj[campo] !== null;
+      mezclado[campo] = presente ? obj[campo] : actual[campo];
     }
     mezclado.id = String(obj.id);
     obj = mezclado;

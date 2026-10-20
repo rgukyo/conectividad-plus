@@ -1,9 +1,32 @@
 /* Conectividad Plus. La misma cadena VERSION está en js/app.js. */
 var VERSION = '3';
 var CACHE = 'conectividad-plus-' + VERSION;
+var SHELL = [
+  './',
+  './index.html',
+  './manifest.json',
+  './css/styles.css',
+  './js/logic.js',
+  './js/demo-data.js',
+  './js/app.js',
+  './favicon.ico',
+  './icons/icon-192.png',
+  './icons/icon-512.png'
+];
 
-self.addEventListener('install', function () {
-  // La instalación termina de inmediato y no toma el control de la página abierta.
+self.addEventListener('install', function (event) {
+  // Guarda el cascarón en la caché de esta versión.
+  // La página abierta sigue igual hasta que toquen Actualizar.
+  event.waitUntil(
+    caches.open(CACHE).then(function (cache) {
+      return Promise.all(SHELL.map(function (url) {
+        return fetch(new Request(url, { cache: 'reload' })).then(function (res) {
+          if (!res.ok) throw new Error('No se pudo guardar ' + url);
+          return cache.put(url, res);
+        });
+      }));
+    })
+  );
 });
 
 self.addEventListener('activate', function (event) {

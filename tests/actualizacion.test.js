@@ -50,11 +50,26 @@ test('la versión del service worker y la de la app son la misma', function () {
   assert.ok(app.indexOf('Versión \' + esc(VERSION)') >= 0 || app.indexOf("Versión ' + esc(VERSION)") >= 0);
 });
 
-test('instalar no bloquea y activar limpia cachés viejas', function () {
+test('instalar guarda el cascarón y no toma el control', function () {
   var sw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
   var instalar = entre(sw, "addEventListener('install'", "addEventListener('activate'");
-  assert.strictEqual(instalar.indexOf('waitUntil'), -1);
+  assert.ok(instalar.indexOf('waitUntil') >= 0);
+  assert.ok(instalar.indexOf("cache: 'reload'") >= 0);
+  assert.ok(instalar.indexOf('cache.put') >= 0);
   assert.strictEqual(instalar.indexOf('skipWaiting'), -1);
+  [
+    './index.html',
+    './manifest.json',
+    './css/styles.css',
+    './js/logic.js',
+    './js/demo-data.js',
+    './js/app.js',
+    './favicon.ico',
+    './icons/icon-192.png',
+    './icons/icon-512.png'
+  ].forEach(function (url) {
+    assert.ok(sw.indexOf("'" + url + "'") >= 0, url);
+  });
   var activar = entre(sw, "addEventListener('activate'", "addEventListener('message'");
   assert.ok(activar.indexOf('caches.delete') >= 0);
   assert.ok(activar.indexOf('self.clients.claim()') >= 0);
@@ -80,14 +95,19 @@ test('la app busca la versión nueva y solo recarga al toque', function () {
   assert.ok(app.indexOf('state.recargaHecha') >= 0);
   assert.ok(app.indexOf('state.pidioActualizar') >= 0);
   var ofrecer = entre(app, 'function ofrecerActualizacion', 'function aplicarActualizacion');
-  assert.ok(ofrecer.indexOf('CP.formularioSucio(camposDeFormularios())') >= 0);
+  assert.strictEqual(ofrecer.indexOf('formularioSucio'), -1);
+  assert.strictEqual(ofrecer.indexOf('if ('), -1);
   assert.strictEqual(ofrecer.indexOf('postMessage'), -1);
   assert.strictEqual(ofrecer.indexOf('location.reload'), -1);
   var aplicar = entre(app, 'function aplicarActualizacion', 'function alCambiarControl');
+  assert.ok(aplicar.indexOf('CP.formularioSucio(camposDeFormularios())') >= 0);
+  assert.ok(aplicar.indexOf('Tienes cambios sin guardar') >= 0);
   assert.ok(aplicar.indexOf('state.pidioActualizar = true') >= 0);
   assert.ok(aplicar.indexOf("postMessage({ type: 'SKIP_WAITING' })") >= 0);
+  assert.ok(aplicar.indexOf('window.location.reload()') >= 0);
   var control = entre(app, 'function alCambiarControl', 'function camposDeFormularios');
   assert.ok(control.indexOf('!state.pidioActualizar') >= 0);
+  assert.ok(control.indexOf('state.hayVersionNueva = false') >= 0);
   assert.ok(control.indexOf('state.recargaHecha') >= 0);
   assert.ok(control.indexOf('window.location.reload()') >= 0);
   assert.ok(control.indexOf('10000') >= 0);

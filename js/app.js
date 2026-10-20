@@ -75,20 +75,40 @@
   function ofrecerActualizacion() {
     state.hayVersionNueva = true;
     pintarAvisos();
-    // El aviso no recarga solo. Si el formulario tiene cambios, se espera el toque.
-    if (CP.formularioSucio(camposDeFormularios())) return;
   }
 
   function aplicarActualizacion() {
+    if (CP.formularioSucio(camposDeFormularios())) {
+      state.confirm = {
+        texto: 'Tienes cambios sin guardar. Si actualizas ahora, se pierden.',
+        ok: 'Actualizar',
+        run: function () { ejecutarActualizacion(); }
+      };
+      render({ soloModal: true });
+      return;
+    }
+    ejecutarActualizacion();
+  }
+
+  function ejecutarActualizacion() {
     var reg = state.swReg;
     var waiting = reg && reg.waiting;
-    if (!waiting) return;
     state.pidioActualizar = true;
-    waiting.postMessage({ type: 'SKIP_WAITING' });
+    if (waiting) {
+      waiting.postMessage({ type: 'SKIP_WAITING' });
+      return;
+    }
+    // Otra pestaña ya activó la versión nueva. Recargar sí toma esa versión.
+    window.location.reload();
   }
 
   function alCambiarControl() {
-    if (!state.pidioActualizar || state.recargaHecha) return;
+    if (!state.pidioActualizar) {
+      state.hayVersionNueva = false;
+      pintarAvisos();
+      return;
+    }
+    if (state.recargaHecha) return;
     state.recargaHecha = true;
     var ahora = Date.now();
     var previa = 0;

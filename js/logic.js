@@ -403,6 +403,22 @@
     return texto;
   }
 
+  function formularioSucio(campos) {
+    var lista = campos || [];
+    var i;
+    for (i = 0; i < lista.length; i++) {
+      var el = lista[i] || {};
+      var tipo = String(el.type || '').toLowerCase();
+      if (tipo === 'hidden' || tipo === 'button' || tipo === 'submit' || tipo === 'reset') continue;
+      if (tipo === 'checkbox' || tipo === 'radio') {
+        if (!!el.checked !== !!el.defaultChecked) return true;
+      } else if (String(el.value == null ? '' : el.value) !== String(el.defaultValue == null ? '' : el.defaultValue)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   function textoDias(estado) {
     if (!estado || estado.dias == null) return 'Sin fecha de vencimiento';
     if (estado.dias < 0) {
@@ -445,6 +461,7 @@
     validarDispositivo: validarDispositivo,
     aplicarPago: aplicarPago,
     fusionarCliente: fusionarCliente,
+    formularioSucio: formularioSucio,
     textoSeguro: textoSeguro,
     CAMPOS_PRESERVAR: CAMPOS_PRESERVAR,
     textoDias: textoDias

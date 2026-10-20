@@ -76,6 +76,8 @@ Está en `tools/import_template.md`. Se pega en la hoja. No guardes ese pegado e
 
 La app guarda en el teléfono la última copia que sí cargó. Sin señal se puede consultar. Para anotar algo nuevo hace falta conexión. El modo demostración sí se puede modificar sin red, y se queda solo en ese teléfono.
 
+Si se publica una versión nueva, aparece el aviso «Hay una versión nueva — Actualizar». No recarga sola: hay que tocarlo, y así no se pierde lo que todavía no se guardó. La versión se ve en Ajustes.
+
 ## Pruebas
 
 ```bash

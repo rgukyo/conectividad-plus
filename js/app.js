@@ -5,6 +5,7 @@
   var K_SETTINGS = 'cp.settings.v1';
   var K_CACHE = 'cp.cache.v1';
   var K_DEMO = 'cp.demo.v1';
+  var VERSION = '3';
 
   var state = {
     settings: { url: '', clave: '', nombre: '' },
@@ -20,7 +21,11 @@
     pagoHecho: null,
     montoManual: false,
     guardando: false,
-    cargando: true
+    cargando: true,
+    hayVersionNueva: false,
+    swReg: null,
+    pidioActualizar: false,
+    recargaHecha: false
   };
 
   var ultimaRuta = null;
@@ -40,9 +45,78 @@
       }
     });
     cargar();
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').catch(function () {});
-    }
+    vigilarServiceWorker();
+  }
+
+  function vigilarServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.addEventListener('controllerchange', alCambiarControl);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') pedirRevision();
+    });
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(function (reg) {
+      state.swReg = reg;
+      if (reg.waiting && navigator.serviceWorker.controller) ofrecerActualizacion();
+      reg.addEventListener('updatefound', function () {
+        var worker = reg.installing;
+        if (!worker) return;
+        worker.addEventListener('statechange', function () {
+          if (worker.state === 'installed' && navigator.serviceWorker.controller) ofrecerActualizacion();
+        });
+      });
+      pedirRevision();
+    }).catch(function () {});
+  }
+
+  function pedirRevision() {
+    if (state.swReg && state.swReg.update) state.swReg.update().catch(function () {});
+  }
+
+  function ofrecerActualizacion() {
+    state.hayVersionNueva = true;
+    pintarAvisos();
+    // El aviso no recarga solo. Si el formulario tiene cambios, se espera el toque.
+    if (CP.formularioSucio(camposDeFormularios())) return;
+  }
+
+  function aplicarActualizacion() {
+    var reg = state.swReg;
+    var waiting = reg && reg.waiting;
+    if (!waiting) return;
+    state.pidioActualizar = true;
+    waiting.postMessage({ type: 'SKIP_WAITING' });
+  }
+
+  function alCambiarControl() {
+    if (!state.pidioActualizar || state.recargaHecha) return;
+    state.recargaHecha = true;
+    var ahora = Date.now();
+    var previa = 0;
+    try { previa = Number(sessionStorage.getItem('cp.sw-recarga') || 0); } catch (e) {}
+    if (previa && ahora - previa < 10000) return;
+    try { sessionStorage.setItem('cp.sw-recarga', String(ahora)); } catch (e) {}
+    window.location.reload();
+  }
+
+  function camposDeFormularios() {
+    var campos = [];
+    document.querySelectorAll('form').forEach(function (form) {
+      form.querySelectorAll('input, textarea, select').forEach(function (el) {
+        campos.push({
+          type: el.type || el.tagName,
+          value: el.value,
+          defaultValue: el.defaultValue,
+          checked: el.checked,
+          defaultChecked: el.defaultChecked
+        });
+      });
+    });
+    return campos;
+  }
+
+  function pintarAvisos() {
+    var avisos = document.getElementById('avisos');
+    if (avisos) avisos.innerHTML = htmlAvisos();
   }
 
   function lsGet(key) {
@@ -320,14 +394,17 @@
   }
 
   function htmlAvisos() {
+    var partes = [];
+    if (state.hayVersionNueva) {
+      partes.push('<p class="aviso actualizacion"><button type="button" class="btn primary block" data-action="aplicar-version">Hay una versión nueva — Actualizar</button></p>');
+    }
     if (state.modo === 'demo') {
-      return '<p class="aviso">Modo demostración con datos ficticios. Nada de esto se guarda en la hoja.</p>';
-    }
-    if (state.aviso) {
+      partes.push('<p class="aviso">Modo demostración con datos ficticios. Nada de esto se guarda en la hoja.</p>');
+    } else if (state.aviso) {
       var clase = state.modo === 'error' ? 'aviso bad' : 'aviso warn';
-      return '<p class="' + clase + '">' + esc(state.aviso) + '</p>';
+      partes.push('<p class="' + clase + '">' + esc(state.aviso) + '</p>');
     }
-    return '';
+    return partes.join('');
   }
 
   function htmlVista() {
@@ -585,6 +662,7 @@
       ? '<p class="aviso warn">Esa dirección es de prueba (/dev) y suele pedir login. Usa la que termina en /exec.</p>'
       : '';
     return '<h1>Ajustes</h1>' +
+      '<p class="ayuda" id="version-app">Versión ' + esc(VERSION) + '</p>' +
       '<p class="ayuda">Sin dirección, la app se queda en demostración y no toca la hoja.</p>' +
       avisoDev +
       '<form id="form-ajustes">' +
@@ -774,6 +852,11 @@
       cargar().then(function () {
         if (state.modo === 'online') toast('Lista actualizada.');
       });
+      return;
+    }
+    if (action === 'aplicar-version') {
+      e.preventDefault();
+      aplicarActualizacion();
     }
   }
 

@@ -120,6 +120,12 @@ p { margin: 0 0 8px; }
 
 .aviso.warn { background: var(--warn-soft); color: var(--warn); }
 .aviso.bad { background: var(--bad-soft); color: var(--bad); }
+.aviso.actualizacion {
+  background: var(--gold-soft);
+  color: var(--ink);
+  padding: 10px;
+}
+.aviso.actualizacion .btn { margin-top: 0; }
 
 #avisos:empty { display: none; }
 

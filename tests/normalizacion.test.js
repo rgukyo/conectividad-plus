@@ -128,7 +128,7 @@ test('un equipo sin modelo se puede guardar y sigue exigiendo la MAC', function 
   assert.ok(linea);
   assert.strictEqual(linea.indexOf('required'), -1);
   var script = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Code.gs'), 'utf8');
-  assert.ok(script.indexOf('Versión: 2') >= 0);
+  assert.ok(script.indexOf('Versión: 3') >= 0);
   assert.strictEqual(script.indexOf('Escribe el modelo'), -1);
   assert.ok(script.indexOf('El modelo es demasiado largo') >= 0);
   assert.ok(script.indexOf('function normalizarMac_') >= 0);
@@ -230,7 +230,7 @@ test('el script de la hoja trae la clave, el candado y las mismas reglas', funct
   assert.ok(src.indexOf('function doPost') >= 0);
   assert.ok(src.indexOf("getProperty('CLAVE')") >= 0);
   assert.ok(src.indexOf('LockService.getScriptLock') >= 0);
-  assert.ok(src.indexOf("['id', 'nombre', 'celular', 'area', 'promo', 'fecha_ultimo_pago', 'proximo_vencimiento', 'meses_pagados', 'notas', 'exento', 'archivado']") >= 0);
+  assert.ok(src.indexOf("['id', 'nombre', 'celular', 'area', 'promo', 'fecha_ultimo_pago', 'proximo_vencimiento', 'meses_pagados', 'notas', 'exento', 'archivado', 'reactivacion']") >= 0);
   assert.ok(src.indexOf('function agregarEncabezadosFaltantes_') >= 0);
   assert.ok(src.indexOf('agregarEncabezadosFaltantes_(sh, headers)') >= 0);
   assert.ok(src.indexOf('function esExento_') >= 0);

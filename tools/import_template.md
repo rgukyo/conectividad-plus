@@ -20,12 +20,13 @@ Copia desde la fila de títulos. Si el renglón no trae `id`, la app le inventa 
 | meses_pagados | Número. `0` si es nuevo. |
 | notas | Texto libre. Vacío si no hay. |
 | exento | `SI` o `NO`, igual que promo. Vacío cuenta como `NO`. |
-| archivado | `SI` o `NO`. Va al final. Vacío cuenta como activo. No borra al cliente. |
+| archivado | `SI` o `NO`. Vacío cuenta como activo. No borra al cliente. |
+| reactivacion | Número. Vacío es `0`. Al reactivar, la app anota `20` una sola vez. |
 
 ```csv
-id,nombre,celular,area,promo,fecha_ultimo_pago,proximo_vencimiento,meses_pagados,notas,exento,archivado
-c_ejemplo_1,Nombre Ejemplo,5500000091,Col. Ejemplo,NO,2026-09-15,2026-10-15,1,Dato ficticio — borra esta fila,NO,NO
-c_ejemplo_2,Otra Persona,5500000092,Otra Colonia,SI,2026-10-10,2026-11-15,3,Dato ficticio — borra esta fila,SI,NO
+id,nombre,celular,area,promo,fecha_ultimo_pago,proximo_vencimiento,meses_pagados,notas,exento,archivado,reactivacion
+c_ejemplo_1,Nombre Ejemplo,5500000091,Col. Ejemplo,NO,2026-09-15,2026-10-15,1,Dato ficticio — borra esta fila,NO,NO,0
+c_ejemplo_2,Otra Persona,5500000092,Otra Colonia,SI,2026-10-10,2026-11-15,3,Dato ficticio — borra esta fila,SI,NO,0
 ```
 
 ## Dispositivos

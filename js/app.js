@@ -5,7 +5,7 @@
   var K_SETTINGS = 'cp.settings.v1';
   var K_CACHE = 'cp.cache.v1';
   var K_DEMO = 'cp.demo.v1';
-  var VERSION = '5';
+  var VERSION = '6';
 
   var state = {
     settings: { url: '', clave: '', nombre: '' },
@@ -17,6 +17,7 @@
     q: '',
     area: '',
     vistaArchivo: 'activos',
+    scriptViejo: false,
     qEquipos: '',
     periodoCobro: '',
     mensualidadAbierta: false,
@@ -213,6 +214,11 @@
           promo: CP.esPromo(c.promo) ? 'SI' : 'NO',
           exento: CP.esPromo(c.exento) ? 'SI' : 'NO',
           archivado: CP.esArchivado(c) ? 'SI' : 'NO',
+          reactivacion: (function () {
+            var n = Number(c.reactivacion);
+            if (!isFinite(n) || n < 0) return 0;
+            return Math.round(n * 100) / 100;
+          })(),
           fecha_ultimo_pago: fecha(c.fecha_ultimo_pago),
           proximo_vencimiento: fecha(c.proximo_vencimiento),
           meses_pagados: c.meses_pagados === '' || c.meses_pagados == null ? 0 : Number(c.meses_pagados) || 0,
@@ -307,12 +313,14 @@
       state.modo = 'demo';
       state.soloLectura = false;
       state.aviso = '';
+      state.scriptViejo = false;
       state.data = leerDemo();
       state.cargando = false;
       render();
       return Promise.resolve();
     }
     return api('list').then(function (data) {
+      state.scriptViejo = !CP.respuestaTraeArchivado(data);
       state.data = normalizarRemoto(data);
       state.modo = 'online';
       state.soloLectura = false;
@@ -426,7 +434,10 @@
     }
     if (state.modo === 'demo') {
       partes.push('<p class="aviso">Modo demostración con datos ficticios. Nada de esto se guarda en la hoja.</p>');
-    } else if (state.aviso) {
+    } else if (state.scriptViejo) {
+      partes.push('<p class="aviso warn">Archivar no se está guardando en la hoja. El script publicado es anterior y no tiene la columna archivado. Publica una versión nueva sin cambiar el enlace /exec.</p>');
+    }
+    if (state.modo !== 'demo' && state.aviso) {
       var clase = state.modo === 'error' ? 'aviso bad' : 'aviso warn';
       partes.push('<p class="' + clase + '">' + esc(state.aviso) + '</p>');
     }
@@ -474,13 +485,13 @@
   function htmlInicio() {
     var hoy = new Date();
     var vencidos = state.data.clientes.filter(function (c) {
-      return CP.estadoDeCliente(c, hoy).clave === 'vencido';
+      return !CP.esArchivado(c) && CP.estadoDeCliente(c, hoy).clave === 'vencido';
     });
     var pronto = state.data.clientes.filter(function (c) {
-      return CP.estadoDeCliente(c, hoy).clave === 'por_vencer';
+      return !CP.esArchivado(c) && CP.estadoDeCliente(c, hoy).clave === 'por_vencer';
     });
     var sinFecha = state.data.clientes.filter(function (c) {
-      return CP.estadoDeCliente(c, hoy).clave === 'sin_fecha';
+      return !CP.esArchivado(c) && CP.estadoDeCliente(c, hoy).clave === 'sin_fecha';
     });
     vencidos.sort(function (a, b) {
       return CP.estadoDeCliente(a, hoy).dias - CP.estadoDeCliente(b, hoy).dias;
@@ -521,7 +532,7 @@
     if (archivados) {
       return '<ul class="lista">' + lista.map(function (c) {
         return '<li class="card">' + htmlClienteLink(c) +
-          '<button type="button" class="btn primary block" data-action="restaurar-cliente" data-id="' + esc(c.id) + '">Restaurar</button></li>';
+          '<button type="button" class="btn primary block" data-action="reactivar-cliente" data-id="' + esc(c.id) + '">Reactivar</button></li>';
       }).join('') + '</ul>';
     }
     return '<ul class="lista">' + lista.map(function (c) {
@@ -532,7 +543,7 @@
   function htmlVencidos() {
     var hoy = new Date();
     var lista = state.data.clientes.filter(function (c) {
-      return CP.estadoDeCliente(c, hoy).clave === 'vencido';
+      return !CP.esArchivado(c) && CP.estadoDeCliente(c, hoy).clave === 'vencido';
     }).sort(function (a, b) {
       return CP.estadoDeCliente(a, hoy).dias - CP.estadoDeCliente(b, hoy).dias;
     });
@@ -591,10 +602,11 @@
       (cliente.promo === 'SI' ? ' · Promo' : '') + '</p>' +
       '<p>Próximo vencimiento<br><strong>' + esc(cliente.proximo_vencimiento ? CP.fechaLarga(cliente.proximo_vencimiento) : 'Sin fecha') + '</strong></p>' +
       htmlMensualidad(cliente) +
+      htmlLeyendaReactivacion(cliente) +
       '<a class="btn primary block" href="#/clientes/' + seg(cliente.id) + '/pago">Registrar pago</a>' +
       '<a class="btn ghost block" href="#/clientes/' + seg(cliente.id) + '/editar">Editar cliente</a>' +
       (CP.esArchivado(cliente)
-        ? '<button type="button" class="btn primary block" data-action="restaurar-cliente" data-id="' + esc(cliente.id) + '">Restaurar</button>'
+        ? '<button type="button" class="btn primary block" data-action="reactivar-cliente" data-id="' + esc(cliente.id) + '">Reactivar</button>'
         : '<p class="ayuda">Archivar lo quita de la lista activa y del pendiente. No borra su registro.</p>' +
           '<button type="button" class="btn ghost block" data-action="archivar-cliente" data-id="' + esc(cliente.id) + '">Archivar cliente</button>') +
       (cliente.notas ? '<p class="notas">' + esc(cliente.notas) + '</p>' : '') +
@@ -664,12 +676,14 @@
     if (!cliente) return htmlNoEsta('Ese cliente no está en la lista.');
     if (state.pagoHecho) return htmlPagoListo(cliente, state.pagoHecho);
     var mensual = CP.mensualidadCliente(cliente, state.data.dispositivos);
+    var cargo = CP.cargoReactivacion(cliente);
     var exento = CP.esExento(cliente);
     var fecha = hoyISO();
-    var monto = mensual;
+    var monto = mensual + cargo;
     return htmlVolver('#/clientes/' + seg(cliente.id), cliente.nombre) +
       '<h1>Registrar pago</h1>' +
       htmlDesglose(cliente) +
+      htmlLeyendaReactivacion(cliente) +
       (!exento && mensual === 0 ? '<p class="aviso warn">Este cliente no tiene equipos. La mensualidad sale en $0.</p>' : '') +
       '<form id="form-pago">' +
       '<input type="hidden" name="cliente_id" value="' + esc(cliente.id) + '">' +
@@ -851,6 +865,11 @@
     return '<span class="chip ' + clase + '">' + esc(estado.etiqueta) + '</span>';
   }
 
+  function htmlLeyendaReactivacion(cliente) {
+    if (CP.cargoReactivacion(cliente) !== CP.CARGO_REACTIVACION) return '';
+    return '<p class="aviso warn">Debe pagar $20 de reactivación</p>';
+  }
+
   function htmlMensualidad(cliente) {
     if (!state.mensualidadAbierta) {
       return '<button type="button" class="btn ghost block" data-action="ver-mensualidad" aria-expanded="false">Consultar mensualidad</button>';
@@ -971,9 +990,9 @@
       pedirArchivar(btn.getAttribute('data-id'));
       return;
     }
-    if (action === 'restaurar-cliente') {
+    if (action === 'reactivar-cliente') {
       e.preventDefault();
-      pedirRestaurar(btn.getAttribute('data-id'));
+      pedirReactivar(btn.getAttribute('data-id'));
       return;
     }
     if (action === 'meses-menos' || action === 'meses-mas') {
@@ -1307,11 +1326,11 @@
     render({ soloModal: true });
   }
 
-  function pedirRestaurar(id) {
+  function pedirReactivar(id) {
     var cliente = buscarCliente(id);
     state.confirm = {
-      texto: '¿Restaurar a ' + (cliente ? cliente.nombre : 'este cliente') + '? Vuelve a la lista activa.',
-      ok: 'Restaurar',
+      texto: '¿Reactivar a ' + (cliente ? cliente.nombre : 'este cliente') + '? Vuelve a la lista activa. Debe pagar $20 de reactivación. Es un cargo único, no es la mensualidad.',
+      ok: 'Reactivar',
       run: function () { return fijarArchivo(id, false); }
     };
     render({ soloModal: true });
@@ -1321,12 +1340,25 @@
     if (rechazoLectura()) return Promise.resolve();
     var actual = buscarCliente(id);
     if (!actual) return Promise.reject(new Error('Cliente no encontrado'));
-    var cliente = CP.fusionarCliente(actual, { archivado: archivado ? 'SI' : 'NO' });
-    return persistirCliente(cliente).then(function () {
-      toast(archivado ? 'Cliente archivado. El registro sigue guardado.' : 'Cliente restaurado.');
+    var cambios = archivado
+      ? { archivado: 'SI' }
+      : { archivado: 'NO', reactivacion: CP.CARGO_REACTIVACION };
+    var cliente = CP.fusionarCliente(actual, cambios);
+    return persistirCliente(cliente).then(function (guardado) {
+      if (!CP.marcaGuardada(cliente, guardado)) {
+        state.scriptViejo = true;
+        toast(archivado
+          ? 'No se archivó. La hoja no guardó la marca. Publica una versión nueva del script, sin cambiar el enlace /exec, y vuelve a intentar.'
+          : 'No se reactivó. La hoja no guardó el regreso ni el cargo de $20. Publica una versión nueva del script, sin cambiar el enlace /exec, y vuelve a intentar.');
+        render();
+        return;
+      }
+      toast(archivado ? 'Cliente archivado. Solo se ve en Archivados.' : 'Cliente reactivado. Debe pagar $20 de reactivación.');
       var parts = rutaActual().parts;
-      if (archivado && parts[0] === 'clientes' && parts[1] && !parts[2]) ir('clientes');
-      else render();
+      if (archivado && parts[0] === 'clientes' && parts[1] && !parts[2]) {
+        state.vistaArchivo = 'activos';
+        ir('clientes');
+      } else render();
     });
   }
 
@@ -1422,7 +1454,7 @@
     var cliente = buscarCliente(val(form, 'cliente_id'));
     if (!cliente) return;
     var meses = parseInt(val(form, 'meses'), 10) || 1;
-    form.elements.monto.value = String(CP.mensualidadCliente(cliente, state.data.dispositivos) * meses);
+    form.elements.monto.value = String(CP.mensualidadCliente(cliente, state.data.dispositivos) * meses + CP.cargoReactivacion(cliente));
   }
 
   function actualizarPreviewPago() {

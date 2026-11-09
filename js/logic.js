@@ -12,6 +12,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   var PRECIO_EQUIPO = 30;
   var DESCUENTO_PAR = 10;
+  var CARGO_REACTIVACION = 20;
   var DIA_CORTE = 15;
   var DIAS_POR_VENCER = 5;
   var MESES = [
@@ -229,12 +230,30 @@
     return precioMensual(equiposDeCliente(dispositivos, cliente.id).length, cliente.promo);
   }
 
+  function reactivacionGuardada(cliente) {
+    var n = Number(cliente && cliente.reactivacion);
+    if (!isFinite(n) || n <= 0) return 0;
+    return Math.round(n * 100) / 100;
+  }
+
+  function cargoReactivacion(cliente) {
+    if (esArchivado(cliente)) return 0;
+    return reactivacionGuardada(cliente);
+  }
+
   function porCobrarEsteMes(clientes, dispositivos, now) {
     var hoy = inicioDeDia(now || new Date());
     var total = 0;
     var detalle = [];
     (clientes || []).forEach(function (cliente) {
-      if (esExento(cliente) || esArchivado(cliente)) return;
+      if (esArchivado(cliente)) return;
+      var cargo = cargoReactivacion(cliente);
+      if (esExento(cliente)) {
+        if (cargo <= 0) return;
+        total += cargo;
+        detalle.push({ id: cliente.id, monto: cargo, estado: 'reactivacion' });
+        return;
+      }
       var estado = estadoCliente(cliente.proximo_vencimiento, hoy);
       var vencimiento = parseFecha(cliente.proximo_vencimiento);
       var incluir = estado.clave === 'vencido' || estado.clave === 'sin_fecha';
@@ -243,12 +262,40 @@
           vencimiento.getMonth() === hoy.getMonth()) {
         incluir = true;
       }
-      if (!incluir) return;
-      var monto = mensualidadCliente(cliente, dispositivos);
+      if (!incluir && cargo <= 0) return;
+      var monto = (incluir ? mensualidadCliente(cliente, dispositivos) : 0) + cargo;
       total += monto;
-      detalle.push({ id: cliente.id, monto: monto, estado: estado.clave });
+      detalle.push({ id: cliente.id, monto: monto, estado: incluir ? estado.clave : 'reactivacion' });
     });
     return { total: total, detalle: detalle };
+  }
+
+  function pagoCubreReactivacion(monto, mensual, meses, cargo) {
+    if (!(cargo > 0)) return false;
+    var pagado = Number(monto);
+    if (!isFinite(pagado)) return false;
+    var n = parseInt(meses, 10);
+    if (!n || n < 1) n = 1;
+    var base = (Number(mensual) || 0) * n;
+    if (pagado + 0.001 >= base + cargo) return true;
+    if (pagado + 0.001 >= cargo && pagado + 0.001 < base) return true;
+    return false;
+  }
+
+  function marcaGuardada(pedido, guardado) {
+    if (!pedido || !guardado) return false;
+    if (esArchivado(pedido) !== esArchivado(guardado)) return false;
+    return reactivacionGuardada(pedido) === reactivacionGuardada(guardado);
+  }
+
+  function respuestaTraeArchivado(data) {
+    var lista = (data && data.clientes) || [];
+    if (!lista.length) return true;
+    var i;
+    for (i = 0; i < lista.length; i++) {
+      if (lista[i] && Object.prototype.hasOwnProperty.call(lista[i], 'archivado')) return true;
+    }
+    return false;
   }
 
   function clavePeriodo(anio, mes) {
@@ -495,6 +542,13 @@
     if (campoPresente(input, 'archivado')) {
       cliente.archivado = esPromo(input.archivado) ? 'SI' : 'NO';
     }
+    if (campoPresente(input, 'reactivacion')) {
+      var reactivacion = input.reactivacion === '' ? 0 : Number(input.reactivacion);
+      if (!isFinite(reactivacion) || reactivacion < 0) {
+        return { ok: false, error: 'El cargo de reactivación no es válido.' };
+      }
+      cliente.reactivacion = Math.round(reactivacion * 100) / 100;
+    }
     if (campoPresente(input, 'fecha_ultimo_pago')) {
       var ultimo = String(input.fecha_ultimo_pago).trim();
       if (ultimo && !parseFecha(ultimo)) return { ok: false, error: 'La fecha del último pago no es válida.' };
@@ -566,8 +620,9 @@
     if (!meses || meses < 1) meses = 1;
     if (meses > 24) throw new Error('Máximo 24 meses por pago.');
     var mensual = mensualidadCliente(cliente, next.dispositivos);
+    var cargo = cargoReactivacion(cliente);
     var monto;
-    if (entrada.monto === '' || entrada.monto == null) monto = mensual * meses;
+    if (entrada.monto === '' || entrada.monto == null) monto = mensual * meses + cargo;
     else monto = Number(entrada.monto);
     if (!isFinite(monto) || monto < 0) throw new Error('Monto inválido');
     monto = Math.round(monto * 100) / 100;
@@ -586,11 +641,12 @@
     cliente.fecha_ultimo_pago = pago.fecha;
     cliente.proximo_vencimiento = cubre;
     cliente.meses_pagados = previos + meses;
+    if (pagoCubreReactivacion(monto, mensual, meses, cargo)) cliente.reactivacion = 0;
     next.pagos.push(pago);
     return { data: next, pago: pago, cliente: Object.assign({}, cliente) };
   }
 
-  var CAMPOS_PRESERVAR = ['fecha_ultimo_pago', 'proximo_vencimiento', 'meses_pagados', 'notas', 'archivado'];
+  var CAMPOS_PRESERVAR = ['fecha_ultimo_pago', 'proximo_vencimiento', 'meses_pagados', 'notas', 'archivado', 'reactivacion'];
 
   function campoPresente(input, campo) {
     return !!input && Object.prototype.hasOwnProperty.call(input, campo) && input[campo] !== undefined && input[campo] !== null;
@@ -650,6 +706,7 @@
   return {
     PRECIO_EQUIPO: PRECIO_EQUIPO,
     DESCUENTO_PAR: DESCUENTO_PAR,
+    CARGO_REACTIVACION: CARGO_REACTIVACION,
     DIA_CORTE: DIA_CORTE,
     DIAS_POR_VENCER: DIAS_POR_VENCER,
     TIPOS: TIPOS,
@@ -674,6 +731,11 @@
     enlaceWhatsApp: enlaceWhatsApp,
     equiposDeCliente: equiposDeCliente,
     mensualidadCliente: mensualidadCliente,
+    cargoReactivacion: cargoReactivacion,
+    reactivacionGuardada: reactivacionGuardada,
+    pagoCubreReactivacion: pagoCubreReactivacion,
+    marcaGuardada: marcaGuardada,
+    respuestaTraeArchivado: respuestaTraeArchivado,
     porCobrarEsteMes: porCobrarEsteMes,
     etiquetaPeriodo: etiquetaPeriodo,
     informeCobros: informeCobros,

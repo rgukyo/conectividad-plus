@@ -5,7 +5,7 @@
   var K_SETTINGS = 'cp.settings.v1';
   var K_CACHE = 'cp.cache.v1';
   var K_DEMO = 'cp.demo.v1';
-  var VERSION = '4';
+  var VERSION = '5';
 
   var state = {
     settings: { url: '', clave: '', nombre: '' },
@@ -16,7 +16,10 @@
     cacheEn: '',
     q: '',
     area: '',
+    vistaArchivo: 'activos',
     qEquipos: '',
+    periodoCobro: '',
+    mensualidadAbierta: false,
     confirm: null,
     pagoHecho: null,
     montoManual: false,
@@ -209,6 +212,7 @@
           area: String(c.area || '').trim(),
           promo: CP.esPromo(c.promo) ? 'SI' : 'NO',
           exento: CP.esPromo(c.exento) ? 'SI' : 'NO',
+          archivado: CP.esArchivado(c) ? 'SI' : 'NO',
           fecha_ultimo_pago: fecha(c.fecha_ultimo_pago),
           proximo_vencimiento: fecha(c.proximo_vencimiento),
           meses_pagados: c.meses_pagados === '' || c.meses_pagados == null ? 0 : Number(c.meses_pagados) || 0,
@@ -352,7 +356,7 @@
 
   function tabActual() {
     var a = rutaActual().parts[0] || 'inicio';
-    if (a === 'clientes' || a === 'vencidos' || a === 'equipos' || a === 'ajustes') return a;
+    if (a === 'clientes' || a === 'vencidos' || a === 'equipos' || a === 'ajustes' || a === 'cobros') return a;
     return 'inicio';
   }
 
@@ -360,6 +364,7 @@
     opciones = opciones || {};
     var firma = location.hash || '#/';
     if (firma !== ultimaRuta) {
+      state.mensualidadAbierta = false;
       if (/\/pago$/.test(firma)) state.montoManual = false;
       ultimaRuta = firma;
     }
@@ -461,6 +466,7 @@
       return htmlFormEquipo(equipoLibre, '');
     }
     if (a === 'equipos') return htmlEquipos();
+    if (a === 'cobros') return htmlCobros();
     if (a === 'ajustes') return htmlAjustes();
     return htmlInicio();
   }
@@ -485,8 +491,8 @@
       '</picture>' +
       '<h1>Hoy</h1>' +
       htmlResumen(true) +
-      '<p class="ayuda">Por cobrar este mes suma un mes de quienes vencen en este mes, de quienes ya vencieron y de quienes no tienen fecha. No acumula meses atrasados. Quien está exento de pago no entra.</p>' +
       '<p><a class="btn primary block" href="#/clientes/nuevo">Nuevo cliente</a></p>' +
+      '<p><a class="btn ghost block" href="#/cobros">Consultar cobros</a></p>' +
       (state.settings.url ? '<p><button type="button" class="btn ghost block" data-action="actualizar">Actualizar</button></p>' : '') +
       htmlGrupo('Vencidos', ordenarPorNombre(vencidos), 'Nadie está vencido.') +
       (pronto.length ? htmlGrupo('Por vencer', ordenarPorNombre(pronto)) : '') +
@@ -497,15 +503,27 @@
     return '<h1>Clientes</h1>' +
       htmlResumen(false) +
       '<label class="campo">Buscar<input id="buscar" type="search" placeholder="Nombre, celular o área" value="' + esc(state.q) + '" autocomplete="off"></label>' +
+      htmlFiltroArchivo() +
       htmlFiltroAreas() +
-      '<p class="ayuda">Por vencer: faltan 5 días o menos. Vencido: la fecha ya pasó.</p>' +
+      '<p class="ayuda">' + (state.vistaArchivo === 'archivados'
+        ? 'Aquí se restaura a quien se archivó. El registro, los pagos, los equipos y las notas siguen guardados.'
+        : 'Por vencer: faltan 5 días o menos. Vencido: la fecha ya pasó.') + '</p>' +
       '<p><a class="btn primary block" href="#/clientes/nuevo">Nuevo cliente</a></p>' +
       '<div id="lista">' + htmlListaClientes() + '</div>';
   }
 
   function htmlListaClientes() {
     var lista = clientesFiltrados();
-    if (!lista.length) return '<p class="vacio">Ningún cliente coincide.</p>';
+    var archivados = state.vistaArchivo === 'archivados';
+    if (!lista.length) {
+      return '<p class="vacio">' + (archivados ? 'Nadie está archivado.' : 'Ningún cliente coincide.') + '</p>';
+    }
+    if (archivados) {
+      return '<ul class="lista">' + lista.map(function (c) {
+        return '<li class="card">' + htmlClienteLink(c) +
+          '<button type="button" class="btn primary block" data-action="restaurar-cliente" data-id="' + esc(c.id) + '">Restaurar</button></li>';
+      }).join('') + '</ul>';
+    }
     return '<ul class="lista">' + lista.map(function (c) {
       return '<li>' + htmlClienteLink(c) + '</li>';
     }).join('') + '</ul>';
@@ -520,10 +538,8 @@
     });
     var cuerpo = lista.length ? '<ul class="lista">' + lista.map(function (c) {
       var estado = CP.estadoDeCliente(c, hoy);
-      var total = CP.mensualidadCliente(c, state.data.dispositivos);
       return '<li class="card"><strong>' + esc(c.nombre) + '</strong>' +
         '<p class="muted">' + esc(c.area || 'Sin área') + ' · ' + esc(CP.textoDias(estado)) + '</p>' +
-        '<p>Mensualidad <strong class="num">' + esc(dinero(total)) + '</strong></p>' +
         '<a class="btn primary block" href="#/clientes/' + seg(c.id) + '/pago">Registrar pago</a></li>';
     }).join('') + '</ul>' : '<p class="vacio">Nadie está vencido.</p>';
     return '<h1>Vencidos</h1>' + htmlResumen(false) + cuerpo;
@@ -548,14 +564,17 @@
     return lista.map(function (eq) {
       return '<article class="card"><h3>' + esc(eq.tipo) + '</h3>' + htmlModelo(eq) +
         '<p class="mac num">' + esc(eq.mac) + '</p>' +
-        (eq.notas ? '<p class="muted">' + esc(eq.notas) + '</p>' : '') +
+        htmlNotaEquipo(eq) +
         '<label class="campo">Asignar a<select data-action="asignar" data-id="' + esc(eq.id) + '"' + (state.soloLectura ? ' disabled' : '') + '>' +
         '<option value="">Elegir cliente…</option>' +
-        ordenarPorNombre(state.data.clientes).map(function (c) {
+        ordenarPorNombre(state.data.clientes.filter(function (c) { return !CP.esArchivado(c); })).map(function (c) {
           return '<option value="' + esc(c.id) + '">' + esc(c.nombre) + '</option>';
         }).join('') +
         '</select></label>' +
-        '<a class="btn ghost block" href="#/equipos/' + seg(eq.id) + '">Editar</a></article>';
+        '<div class="fila-botones">' +
+        '<a class="btn ghost" href="#/equipos/' + seg(eq.id) + '">Editar</a>' +
+        '<button type="button" class="btn danger" data-action="borrar-equipo" data-id="' + esc(eq.id) + '">Eliminar</button>' +
+        '</div></article>';
     }).join('');
   }
 
@@ -571,9 +590,13 @@
       (cel.ok ? ' · <a href="tel:+52' + cel.digitos + '">' + esc(cel.digitos) + '</a>' : '') +
       (cliente.promo === 'SI' ? ' · Promo' : '') + '</p>' +
       '<p>Próximo vencimiento<br><strong>' + esc(cliente.proximo_vencimiento ? CP.fechaLarga(cliente.proximo_vencimiento) : 'Sin fecha') + '</strong></p>' +
-      htmlDesglose(cliente) +
+      htmlMensualidad(cliente) +
       '<a class="btn primary block" href="#/clientes/' + seg(cliente.id) + '/pago">Registrar pago</a>' +
       '<a class="btn ghost block" href="#/clientes/' + seg(cliente.id) + '/editar">Editar cliente</a>' +
+      (CP.esArchivado(cliente)
+        ? '<button type="button" class="btn primary block" data-action="restaurar-cliente" data-id="' + esc(cliente.id) + '">Restaurar</button>'
+        : '<p class="ayuda">Archivar lo quita de la lista activa y del pendiente. No borra su registro.</p>' +
+          '<button type="button" class="btn ghost block" data-action="archivar-cliente" data-id="' + esc(cliente.id) + '">Archivar cliente</button>') +
       (cliente.notas ? '<p class="notas">' + esc(cliente.notas) + '</p>' : '') +
       '<h2>Equipos</h2>' +
       (equipos.length ? equipos.map(function (eq) {
@@ -604,7 +627,7 @@
       '<label class="check"><input type="checkbox" name="promo"' + (cliente.promo === 'SI' ? ' checked' : '') + '><span>Promo activa</span></label>' +
       '<p class="ayuda">Con promo, cada dos equipos restan $10. 2 equipos quedan en $50, 3 en $80 y 4 en $100.</p>' +
       '<label class="check"><input type="checkbox" name="exento"' + (cliente.exento === 'SI' ? ' checked' : '') + '><span>Exento de pago</span></label>' +
-      '<p class="ayuda">Exento de pago deja la mensualidad en $0. No sale como vencido ni en por cobrar, y el pago no abre WhatsApp.</p>' +
+      '<p class="ayuda">Exento de pago deja la mensualidad en $0. No sale como vencido ni en el pendiente estimado, y el pago no abre WhatsApp.</p>' +
       '<label class="campo">Notas<textarea name="notas" maxlength="2000">' + esc(cliente.notas) + '</textarea></label>' +
       '<details><summary>Fechas, si ya las traías anotadas</summary>' +
       '<label class="campo">Último pago<input name="fecha_ultimo_pago" type="date" value="' + esc(cliente.fecha_ultimo_pago) + '"></label>' +
@@ -721,17 +744,82 @@
   function htmlResumen(grande) {
     var r = CP.resumen(state.data, new Date());
     if (!grande) {
-      return '<p class="resumen-mini"><strong class="num">' + r.clientes + '</strong> clientes · <strong class="num">' + esc(dinero(r.porCobrar)) + '</strong> por cobrar · <strong class="num">' + r.vencidos + '</strong> vencidos</p>';
+      return '<p class="resumen-mini"><strong class="num">' + r.clientes + '</strong> clientes · <strong class="num">' + r.vencidos + '</strong> vencidos</p>';
     }
     return '<section class="stats" aria-label="Resumen">' +
       '<article class="stat"><p class="stat-num num">' + r.clientes + '</p><p class="stat-label">Clientes</p></article>' +
-      '<article class="stat money"><p class="stat-num num">' + esc(dinero(r.porCobrar)) + '</p><p class="stat-label">Por cobrar este mes</p></article>' +
       '<article class="stat' + (r.vencidos ? ' alerta' : '') + '"><p class="stat-num num">' + r.vencidos + '</p><p class="stat-label">Vencidos</p></article>' +
       '</section>';
   }
 
+  function htmlCobros() {
+    var info = CP.informeCobros(state.data, state.periodoCobro, new Date());
+    var opciones = info.periodos.map(function (clave) {
+      return '<option value="' + esc(clave) + '"' + (clave === info.clave ? ' selected' : '') + '>' +
+        esc(CP.etiquetaPeriodo(clave)) + '</option>';
+    }).join('');
+    var detalleCobrado = info.pagos
+      ? 'Suma de ' + info.pagos + (info.pagos === 1 ? ' pago registrado' : ' pagos registrados') + ' en ' + info.etiqueta + '.'
+      : 'No hay pagos registrados en ' + info.etiqueta + '. El total cobrado es $0.';
+    var pendiente;
+    if (info.pendiente) {
+      pendiente = '<section class="desglose"><h2>Pendiente</h2>' +
+        '<p class="ayuda">Estimación de lo que falta por cobrar este mes. No es dinero ya cobrado y no se suma al total de arriba.</p>' +
+        '<p class="total"><span>Pendiente estimado</span><strong class="num">' + esc(dinero(info.pendiente.total)) + '</strong></p>' +
+        '<p class="ayuda">' + info.pendiente.clientes + (info.pendiente.clientes === 1 ? ' cliente entra' : ' clientes entran') +
+        ' en esa cuenta: vencen este mes, ya vencieron o no tienen fecha. Quien está exento no entra.</p></section>';
+    } else {
+      pendiente = '<section class="desglose"><h2>Pendiente</h2>' +
+        '<p class="ayuda">El pendiente estimado solo se muestra en el mes en curso. En otros periodos no se reconstruye, porque habría que inventar deudas.</p></section>';
+    }
+    return htmlVolver('#/', 'Inicio') +
+      '<h1>Cobros</h1>' +
+      '<p class="ayuda">Se abre a propósito. El cobrado sale solo de pagos anotados. Las deudas y las mensualidades no cuentan como ingreso. Las dos cifras no se suman.</p>' +
+      '<label class="campo">Periodo<select id="periodo-cobros">' + opciones + '</select></label>' +
+      '<section class="desglose cobrado"><h2>Cobrado</h2>' +
+      '<p class="total"><span>Total cobrado</span><strong class="num">' + esc(dinero(info.cobrado)) + '</strong></p>' +
+      '<p class="ayuda">' + esc(detalleCobrado) + '</p></section>' +
+      pendiente +
+      htmlFaltantesCobro(info);
+  }
+
+  function htmlFaltantesCobro(info) {
+    var partes = [];
+    if (info.faltantes.length) {
+      var items = info.faltantes.map(function (f) {
+        var porque = f.motivo === 'fecha_sin_pago'
+          ? 'La fecha de último pago no coincide con ningún pago registrado.'
+          : 'Tiene fecha de pago o meses pagados, y no hay ningún pago registrado.';
+        return '<li class="item"><span class="item-main"><strong>' + esc(f.nombre || 'Sin nombre') + '</strong>' +
+          '<span class="muted">' + porque + '</span></span></li>';
+      }).join('');
+      partes.push('<h2>Registros que faltan</h2>' +
+        '<p class="aviso warn">Estos clientes no se suman al cobrado. No hay un renglón de pago con el monto, y no se inventa.</p>' +
+        '<ul class="lista">' + items + '</ul>');
+    }
+    if (info.pagosSinFecha) {
+      partes.push('<p class="aviso warn">' + info.pagosSinFecha +
+        (info.pagosSinFecha === 1 ? ' pago no tiene fecha válida' : ' pagos no tienen fecha válida') +
+        ' y queda fuera de todos los periodos.</p>');
+    }
+    if (info.pagosSinMonto) {
+      partes.push('<p class="aviso warn">' + info.pagosSinMonto +
+        (info.pagosSinMonto === 1 ? ' pago de este periodo no tiene monto' : ' pagos de este periodo no tienen monto') +
+        ' y no se suma.</p>');
+    }
+    return partes.join('');
+  }
+
+  function htmlFiltroArchivo() {
+    var archivados = state.vistaArchivo === 'archivados';
+    return '<div class="chips" role="group" aria-label="Lista de clientes">' +
+      '<button type="button" data-action="filtrar-archivo" data-archivo="activos" aria-pressed="' + (archivados ? 'false' : 'true') + '">Activos</button>' +
+      '<button type="button" data-action="filtrar-archivo" data-archivo="archivados" aria-pressed="' + (archivados ? 'true' : 'false') + '">Archivados</button>' +
+      '</div>';
+  }
+
   function htmlFiltroAreas() {
-    var areas = areasUnicas();
+    var areas = areasDe(clientesDeVista());
     var botones = '<button type="button" data-action="filtrar-area" data-area="" aria-pressed="' + (state.area === '' ? 'true' : 'false') + '">Todas</button>';
     areas.forEach(function (area) {
       botones += '<button type="button" data-action="filtrar-area" data-area="' + esc(area) + '" aria-pressed="' + (state.area === area ? 'true' : 'false') + '">' + esc(area) + '</button>';
@@ -751,17 +839,24 @@
   function htmlClienteLink(c) {
     var estado = CP.estadoDeCliente(c, new Date());
     var n = CP.equiposDeCliente(state.data.dispositivos, c.id).length;
-    var total = CP.mensualidadCliente(c, state.data.dispositivos);
     return '<a class="item" href="#/clientes/' + seg(c.id) + '">' +
       '<span class="item-main"><strong>' + esc(c.nombre) + '</strong>' +
       '<span class="muted">' + esc(c.area || 'Sin área') + ' · ' + n + (n === 1 ? ' equipo' : ' equipos') +
       (c.promo === 'SI' ? ' · Promo' : '') + '</span></span>' +
-      '<span class="item-side">' + htmlChip(estado) + '<strong class="num">' + esc(dinero(total)) + '</strong></span></a>';
+      '<span class="item-side">' + htmlChip(estado) + '</span></a>';
   }
 
   function htmlChip(estado) {
-    var clase = { al_corriente: 'ok', por_vencer: 'warn', vencido: 'bad', exento: 'mute' }[estado.clave] || 'mute';
+    var clase = { al_corriente: 'ok', por_vencer: 'warn', vencido: 'bad', exento: 'mute', archivado: 'mute' }[estado.clave] || 'mute';
     return '<span class="chip ' + clase + '">' + esc(estado.etiqueta) + '</span>';
+  }
+
+  function htmlMensualidad(cliente) {
+    if (!state.mensualidadAbierta) {
+      return '<button type="button" class="btn ghost block" data-action="ver-mensualidad" aria-expanded="false">Consultar mensualidad</button>';
+    }
+    return '<button type="button" class="btn ghost block" data-action="ver-mensualidad" aria-expanded="true">Ocultar mensualidad</button>' +
+      htmlDesglose(cliente);
   }
 
   function htmlDesglose(cliente) {
@@ -794,10 +889,15 @@
     return modelo ? '<p>' + esc(modelo) + '</p>' : '';
   }
 
+  function htmlNotaEquipo(eq) {
+    var nota = CP.notaVisibleEquipo(eq && eq.notas);
+    return nota ? '<p class="muted">' + esc(nota) + '</p>' : '';
+  }
+
   function htmlEquipoCard(eq, href) {
     return '<article class="card"><h3>' + esc(eq.tipo) + '</h3>' + htmlModelo(eq) +
       '<p class="mac num">' + esc(eq.mac) + '</p>' +
-      (eq.notas ? '<p class="muted">' + esc(eq.notas) + '</p>' : '') +
+      htmlNotaEquipo(eq) +
       '<div class="fila-botones"><a class="btn ghost" href="' + href + '">Editar</a>' +
       '<button type="button" class="btn danger" data-action="borrar-equipo" data-id="' + esc(eq.id) + '">Borrar</button></div></article>';
   }
@@ -860,6 +960,22 @@
       render();
       return;
     }
+    if (action === 'filtrar-archivo') {
+      e.preventDefault();
+      state.vistaArchivo = btn.getAttribute('data-archivo') === 'archivados' ? 'archivados' : 'activos';
+      render();
+      return;
+    }
+    if (action === 'archivar-cliente') {
+      e.preventDefault();
+      pedirArchivar(btn.getAttribute('data-id'));
+      return;
+    }
+    if (action === 'restaurar-cliente') {
+      e.preventDefault();
+      pedirRestaurar(btn.getAttribute('data-id'));
+      return;
+    }
     if (action === 'meses-menos' || action === 'meses-mas') {
       e.preventDefault();
       cambiarMeses(action === 'meses-mas' ? 1 : -1);
@@ -868,6 +984,12 @@
     if (action === 'borrar-equipo') {
       e.preventDefault();
       pedirBorrar(btn.getAttribute('data-id'));
+      return;
+    }
+    if (action === 'ver-mensualidad') {
+      e.preventDefault();
+      state.mensualidadAbierta = !state.mensualidadAbierta;
+      render();
       return;
     }
     if (action === 'ver-clave') {
@@ -962,6 +1084,11 @@
 
   function onChange(e) {
     var el = e.target;
+    if (el.id === 'periodo-cobros') {
+      state.periodoCobro = el.value;
+      render();
+      return;
+    }
     if (el.getAttribute('data-action') === 'asignar') {
       var clienteId = el.value;
       var id = el.getAttribute('data-id');
@@ -1169,6 +1296,40 @@
     });
   }
 
+  function pedirArchivar(id) {
+    var cliente = buscarCliente(id);
+    state.confirm = {
+      texto: '¿Archivar a ' + (cliente ? cliente.nombre : 'este cliente') + '? Sale de la lista activa y no entra en el pendiente. Se conservan su registro, sus pagos, sus equipos y sus notas.',
+      ok: 'Archivar',
+      peligro: true,
+      run: function () { return fijarArchivo(id, true); }
+    };
+    render({ soloModal: true });
+  }
+
+  function pedirRestaurar(id) {
+    var cliente = buscarCliente(id);
+    state.confirm = {
+      texto: '¿Restaurar a ' + (cliente ? cliente.nombre : 'este cliente') + '? Vuelve a la lista activa.',
+      ok: 'Restaurar',
+      run: function () { return fijarArchivo(id, false); }
+    };
+    render({ soloModal: true });
+  }
+
+  function fijarArchivo(id, archivado) {
+    if (rechazoLectura()) return Promise.resolve();
+    var actual = buscarCliente(id);
+    if (!actual) return Promise.reject(new Error('Cliente no encontrado'));
+    var cliente = CP.fusionarCliente(actual, { archivado: archivado ? 'SI' : 'NO' });
+    return persistirCliente(cliente).then(function () {
+      toast(archivado ? 'Cliente archivado. El registro sigue guardado.' : 'Cliente restaurado.');
+      var parts = rutaActual().parts;
+      if (archivado && parts[0] === 'clientes' && parts[1] && !parts[2]) ir('clientes');
+      else render();
+    });
+  }
+
   function pedirBorrar(id) {
     var eq = buscarEquipo(id);
     state.confirm = {
@@ -1326,8 +1487,17 @@
     return null;
   }
 
+  function clientesDeVista() {
+    var archivados = state.vistaArchivo === 'archivados';
+    return state.data.clientes.filter(function (c) {
+      return CP.esArchivado(c) === archivados;
+    });
+  }
+
   function clientesFiltrados() {
+    var archivados = state.vistaArchivo === 'archivados';
     return ordenarPorNombre(state.data.clientes.filter(function (c) {
+      if (CP.esArchivado(c) !== archivados) return false;
       if (state.area && c.area !== state.area) return false;
       if (!state.q) return true;
       return fold(c.nombre + ' ' + c.celular + ' ' + c.area).indexOf(fold(state.q)) >= 0;
@@ -1352,10 +1522,14 @@
     });
   }
 
-  function areasUnicas() {
+  function areasDe(lista) {
     var set = {};
-    state.data.clientes.forEach(function (c) { if (c.area) set[c.area] = true; });
+    (lista || []).forEach(function (c) { if (c.area) set[c.area] = true; });
     return Object.keys(set).sort(function (a, b) { return a.localeCompare(b, 'es-MX'); });
+  }
+
+  function areasUnicas() {
+    return areasDe(state.data.clientes);
   }
 
   function fold(s) {

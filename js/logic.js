@@ -35,6 +35,11 @@
     return esPromo(cliente);
   }
 
+  function esArchivado(cliente) {
+    if (!cliente || typeof cliente !== 'object') return false;
+    return esPromo(cliente.archivado);
+  }
+
   function precioMensual(n, promo) {
     var equipos = parseInt(n, 10);
     if (!equipos || equipos < 0) equipos = 0;
@@ -129,6 +134,7 @@
   }
 
   function estadoDeCliente(cliente, now) {
+    if (esArchivado(cliente)) return { clave: 'archivado', etiqueta: 'Archivado', dias: null };
     if (esExento(cliente)) return { clave: 'exento', etiqueta: 'Exento', dias: null };
     var fecha = cliente && typeof cliente === 'object' ? cliente.proximo_vencimiento : cliente;
     return estadoCliente(fecha, now);
@@ -228,7 +234,7 @@
     var total = 0;
     var detalle = [];
     (clientes || []).forEach(function (cliente) {
-      if (esExento(cliente)) return;
+      if (esExento(cliente) || esArchivado(cliente)) return;
       var estado = estadoCliente(cliente.proximo_vencimiento, hoy);
       var vencimiento = parseFecha(cliente.proximo_vencimiento);
       var incluir = estado.clave === 'vencido' || estado.clave === 'sin_fecha';
@@ -245,19 +251,210 @@
     return { total: total, detalle: detalle };
   }
 
+  function clavePeriodo(anio, mes) {
+    var m = String(mes + 1);
+    if (m.length < 2) m = '0' + m;
+    return anio + '-' + m;
+  }
+
+  function parsePeriodo(clave, now) {
+    var hoy = inicioDeDia(now || new Date());
+    var match = String(clave || '').match(/^(\d{4})-(\d{2})$/);
+    if (!match) return { anio: hoy.getFullYear(), mes: hoy.getMonth() };
+    var anio = Number(match[1]);
+    var mes = Number(match[2]) - 1;
+    if (mes < 0 || mes > 11 || anio < 2000 || anio > 2100) {
+      return { anio: hoy.getFullYear(), mes: hoy.getMonth() };
+    }
+    return { anio: anio, mes: mes };
+  }
+
+  function etiquetaPeriodo(clave) {
+    var match = String(clave || '').match(/^(\d{4})-(\d{2})$/);
+    if (!match) return '';
+    var mes = Number(match[2]) - 1;
+    if (mes < 0 || mes > 11) return '';
+    return MESES[mes] + ' ' + match[1];
+  }
+
+  function periodosDisponibles(pagos, now) {
+    var hoy = inicioDeDia(now || new Date());
+    var map = {};
+    map[clavePeriodo(hoy.getFullYear(), hoy.getMonth())] = true;
+    (pagos || []).forEach(function (pago) {
+      var fecha = parseFecha(pago && pago.fecha);
+      if (!fecha) return;
+      map[clavePeriodo(fecha.getFullYear(), fecha.getMonth())] = true;
+    });
+    return Object.keys(map).sort(function (a, b) {
+      if (a === b) return 0;
+      return a < b ? 1 : -1;
+    });
+  }
+
+  function montoRegistrado(value) {
+    if (value === '' || value == null) return null;
+    if (typeof value === 'string' && !value.trim()) return null;
+    var n = Number(value);
+    if (!isFinite(n)) return null;
+    return Math.round(n * 100) / 100;
+  }
+
+  function pagosDelCliente(pagos, clienteId) {
+    var id = String(clienteId || '');
+    return (pagos || []).filter(function (pago) {
+      return String(pago && pago.cliente_id || '') === id;
+    });
+  }
+
+  function informeCobros(data, periodoClave, now) {
+    var fuente = data || {};
+    var pagos = fuente.pagos || [];
+    var clientes = fuente.clientes || [];
+    var hoy = inicioDeDia(now || new Date());
+    var periodo = parsePeriodo(periodoClave, hoy);
+    var clave = clavePeriodo(periodo.anio, periodo.mes);
+    var esMesActual = periodo.anio === hoy.getFullYear() && periodo.mes === hoy.getMonth();
+    var incluidos = 0;
+    var cobrado = 0;
+    var pagosSinFecha = 0;
+    var pagosSinMonto = 0;
+    pagos.forEach(function (pago) {
+      var fecha = parseFecha(pago && pago.fecha);
+      if (!fecha) {
+        pagosSinFecha += 1;
+        return;
+      }
+      if (fecha.getFullYear() !== periodo.anio || fecha.getMonth() !== periodo.mes) return;
+      var monto = montoRegistrado(pago.monto);
+      if (monto == null) {
+        pagosSinMonto += 1;
+        return;
+      }
+      incluidos += 1;
+      cobrado += monto;
+    });
+    cobrado = Math.round(cobrado * 100) / 100;
+    var faltantes = [];
+    clientes.forEach(function (cliente) {
+      var fecha = parseFecha(cliente && cliente.fecha_ultimo_pago);
+      var meses = parseInt(cliente && cliente.meses_pagados, 10);
+      if (!meses || meses < 0) meses = 0;
+      var parecePago = !!fecha || meses > 0;
+      if (!parecePago) return;
+      var delCliente = pagosDelCliente(pagos, cliente.id);
+      var motivo = '';
+      if (!delCliente.length) motivo = 'sin_pagos';
+      else if (fecha) {
+        var iso = formatISO(fecha);
+        var coincide = delCliente.some(function (pago) {
+          var f = parseFecha(pago.fecha);
+          return f && formatISO(f) === iso;
+        });
+        if (!coincide) motivo = 'fecha_sin_pago';
+      }
+      if (!motivo) return;
+      faltantes.push({
+        id: String(cliente.id || ''),
+        nombre: String(cliente.nombre || '').trim(),
+        motivo: motivo
+      });
+    });
+    faltantes.sort(function (a, b) {
+      return a.nombre.localeCompare(b.nombre, 'es-MX') || a.id.localeCompare(b.id);
+    });
+    var pendiente = null;
+    if (esMesActual) {
+      var estimado = porCobrarEsteMes(clientes, fuente.dispositivos, hoy);
+      pendiente = { total: estimado.total, clientes: estimado.detalle.length };
+    }
+    return {
+      clave: clave,
+      etiqueta: etiquetaPeriodo(clave),
+      esMesActual: esMesActual,
+      cobrado: cobrado,
+      pagos: incluidos,
+      pagosSinFecha: pagosSinFecha,
+      pagosSinMonto: pagosSinMonto,
+      faltantes: faltantes,
+      pendiente: pendiente,
+      periodos: periodosDisponibles(pagos, hoy)
+    };
+  }
+
+  function esFragmentoImportacion(fragmento) {
+    var t = String(fragmento || '');
+    if (/datos2(\.xlsx|\.xls|\.csv)?/i.test(t)) return true;
+    if (/agregado desde\b/i.test(t) && /(\.xlsx|\.xls|\.csv|\bfila\b)/i.test(t)) return true;
+    if (/fila\s+\d+\s+de\s+hoja\b/i.test(t)) return true;
+    if (/hoja\s+\d+\s+original/i.test(t)) return true;
+    if (/c[oó]digo original\s*:/i.test(t)) return true;
+    if (/marca\s*\/\s*equipo\b/i.test(t) && /datos2/i.test(t)) return true;
+    if (/nombre en datos2/i.test(t)) return true;
+    return false;
+  }
+
+  function partirFrases(texto) {
+    var partes = [];
+    var actual = '';
+    var i;
+    for (i = 0; i < texto.length; i++) {
+      var ch = texto.charAt(i);
+      if (ch === '\n') {
+        if (actual.trim()) partes.push(actual.trim());
+        actual = '';
+        continue;
+      }
+      actual += ch;
+      if (ch === '.' && (i + 1 >= texto.length || /\s/.test(texto.charAt(i + 1)))) {
+        if (actual.trim()) partes.push(actual.trim());
+        actual = '';
+      }
+    }
+    if (actual.trim()) partes.push(actual.trim());
+    return partes;
+  }
+
+  function notaVisibleEquipo(notas) {
+    var original = String(notas == null ? '' : notas).trim();
+    if (!original) return '';
+    var partes = partirFrases(original);
+    var hayImport = false;
+    var i;
+    for (i = 0; i < partes.length; i++) {
+      if (esFragmentoImportacion(partes[i])) {
+        hayImport = true;
+        break;
+      }
+    }
+    if (!hayImport) return original;
+    var relleno = /^(sin asignar|sin cliente)\.?$/i;
+    var visibles = [];
+    for (i = 0; i < partes.length; i++) {
+      var frase = partes[i];
+      if (esFragmentoImportacion(frase) || relleno.test(frase)) continue;
+      var limpia = frase.replace(/\.+$/g, '').trim();
+      if (limpia) visibles.push(limpia);
+    }
+    return visibles.join('. ').replace(/[ \t]+/g, ' ').trim();
+  }
+
   function resumen(data, now) {
     var fuente = data || {};
     var clientes = fuente.clientes || [];
     var cobro = porCobrarEsteMes(clientes, fuente.dispositivos, now);
     var vencidos = 0;
     var porVencer = 0;
+    var activos = 0;
     clientes.forEach(function (cliente) {
+      if (esArchivado(cliente)) return;
+      activos += 1;
       var estado = estadoDeCliente(cliente, now);
       if (estado.clave === 'vencido') vencidos += 1;
       if (estado.clave === 'por_vencer') porVencer += 1;
     });
     return {
-      clientes: clientes.length,
+      clientes: activos,
       porCobrar: cobro.total,
       vencidos: vencidos,
       porVencer: porVencer,
@@ -294,6 +491,9 @@
     };
     if (campoPresente(input, 'exento')) {
       cliente.exento = esPromo(input.exento) ? 'SI' : 'NO';
+    }
+    if (campoPresente(input, 'archivado')) {
+      cliente.archivado = esPromo(input.archivado) ? 'SI' : 'NO';
     }
     if (campoPresente(input, 'fecha_ultimo_pago')) {
       var ultimo = String(input.fecha_ultimo_pago).trim();
@@ -390,7 +590,7 @@
     return { data: next, pago: pago, cliente: Object.assign({}, cliente) };
   }
 
-  var CAMPOS_PRESERVAR = ['fecha_ultimo_pago', 'proximo_vencimiento', 'meses_pagados', 'notas'];
+  var CAMPOS_PRESERVAR = ['fecha_ultimo_pago', 'proximo_vencimiento', 'meses_pagados', 'notas', 'archivado'];
 
   function campoPresente(input, campo) {
     return !!input && Object.prototype.hasOwnProperty.call(input, campo) && input[campo] !== undefined && input[campo] !== null;
@@ -435,6 +635,7 @@
   }
 
   function textoDias(estado) {
+    if (estado && estado.clave === 'archivado') return 'Fuera de la lista activa';
     if (estado && estado.clave === 'exento') return 'No se cobra';
     if (!estado || estado.dias == null) return 'Sin fecha de vencimiento';
     if (estado.dias < 0) {
@@ -454,6 +655,7 @@
     TIPOS: TIPOS,
     esPromo: esPromo,
     esExento: esExento,
+    esArchivado: esArchivado,
     precioMensual: precioMensual,
     desgloseMensual: desgloseMensual,
     parseFecha: parseFecha,
@@ -473,6 +675,9 @@
     equiposDeCliente: equiposDeCliente,
     mensualidadCliente: mensualidadCliente,
     porCobrarEsteMes: porCobrarEsteMes,
+    etiquetaPeriodo: etiquetaPeriodo,
+    informeCobros: informeCobros,
+    notaVisibleEquipo: notaVisibleEquipo,
     resumen: resumen,
     clonarData: clonarData,
     validarCliente: validarCliente,

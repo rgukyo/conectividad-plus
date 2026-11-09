@@ -51,7 +51,7 @@ Quien tenga esa URL y la clave puede leer y modificar la hoja. Por eso la clave 
   - 2 equipos → $50
   - 3 equipos → $80
   - 4 equipos → $100
-- Con `exento` en `SI`: la mensualidad es $0, no sale como vencido ni en por cobrar, y al registrar un pago no se abre WhatsApp. El pago sí se puede guardar.
+- Con `exento` en `SI`: la mensualidad es $0, no sale como vencido ni en el pendiente estimado, y al registrar un pago no se abre WhatsApp. El pago sí se puede guardar.
 
 ## Día 15
 
@@ -67,7 +67,9 @@ Después de guardarlo se abre WhatsApp con el recado de gracias. Si el cliente e
 
 En la lista, **Por vencer** significa que faltan 5 días o menos. **Vencido** es cuando la fecha ya pasó.
 
-**Por cobrar este mes** suma un mes de quienes vencen en el mes en curso, de quienes ya vencieron y de quienes no tienen fecha. No multiplica los meses atrasados. Un cliente exento no entra en esa suma ni en el conteo de vencidos.
+El inicio no muestra importes. **Cobros** se abre con «Consultar cobros». El total cobrado suma los pagos registrados en el periodo elegido, también los de quien después se archivó. El pendiente estimado del mes en curso va aparte: es un mes de quienes vencen en el mes, de quienes ya vencieron y de quienes no tienen fecha. No multiplica meses atrasados, no es un ingreso y no se suma al cobrado. Un cliente exento, o uno archivado, no entra en ese pendiente ni en el conteo de activos ni en el de vencidos. Si alguien tiene fecha de pago y no hay renglón en Pagos, la pantalla lo dice y no inventa el monto.
+
+**Archivar cliente** lo quita de la lista activa, con confirmación. No borra su registro, sus pagos, sus equipos ni sus notas. En Clientes, el filtro **Archivados** lo restaura si regresa. Un renglón viejo sin esa columna sigue activo. Para que se guarde en la hoja hay que publicar una versión nueva del Apps Script; la columna `archivado` se agrega sola al final.
 
 ## Importar lo que ya tienen anotado
 

@@ -230,7 +230,7 @@ test('el script de la hoja trae la clave, el candado y las mismas reglas', funct
   assert.ok(src.indexOf('function doPost') >= 0);
   assert.ok(src.indexOf("getProperty('CLAVE')") >= 0);
   assert.ok(src.indexOf('LockService.getScriptLock') >= 0);
-  assert.ok(src.indexOf("['id', 'nombre', 'celular', 'area', 'promo', 'fecha_ultimo_pago', 'proximo_vencimiento', 'meses_pagados', 'notas', 'exento']") >= 0);
+  assert.ok(src.indexOf("['id', 'nombre', 'celular', 'area', 'promo', 'fecha_ultimo_pago', 'proximo_vencimiento', 'meses_pagados', 'notas', 'exento', 'archivado']") >= 0);
   assert.ok(src.indexOf('function agregarEncabezadosFaltantes_') >= 0);
   assert.ok(src.indexOf('agregarEncabezadosFaltantes_(sh, headers)') >= 0);
   assert.ok(src.indexOf('function esExento_') >= 0);

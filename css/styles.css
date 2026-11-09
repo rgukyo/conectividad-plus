@@ -139,7 +139,7 @@ p { margin: 0 0 8px; }
 
 .stats {
   display: grid;
-  grid-template-columns: 1fr 1.25fr 0.9fr;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
@@ -374,6 +374,8 @@ textarea { min-height: 96px; resize: vertical; }
   font-size: 1.6rem;
   font-weight: 700;
 }
+
+.desglose.cobrado { border: 2px solid var(--blue); }
 
 .card, .desglose, .mensaje-box {
   background: var(--card);

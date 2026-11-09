@@ -1,7 +1,8 @@
 /**
  * Conectividad Plus — puente entre la app y el Google Sheet.
- * Versión: 2. El modelo del equipo puede ir vacío. La columna exento va al final de Clientes
- * (SI o NO, igual que promo) y se agrega sola si la hoja todavía no la tiene.
+ * Versión: 2. El modelo del equipo puede ir vacío. Las columnas exento y archivado van al final
+ * de Clientes (SI o NO, igual que promo) y se agregan solas si la hoja todavía no las tiene.
+ * archivado vacío cuenta como activo. No borra pagos ni equipos.
  * Después de pegar este archivo hay que publicar una implementación nueva.
  *
  * Cómo publicarlo (también está en el README):
@@ -20,7 +21,7 @@ var PRECIO_EQUIPO = 30;
 var DESCUENTO_PAR = 10;
 var DIA_CORTE = 15;
 var TIPOS_ = ['Celular', 'Tablet', 'iPad', 'TV Smart', 'PC', 'Otro'];
-var HEADERS_CLIENTES = ['id', 'nombre', 'celular', 'area', 'promo', 'fecha_ultimo_pago', 'proximo_vencimiento', 'meses_pagados', 'notas', 'exento'];
+var HEADERS_CLIENTES = ['id', 'nombre', 'celular', 'area', 'promo', 'fecha_ultimo_pago', 'proximo_vencimiento', 'meses_pagados', 'notas', 'exento', 'archivado'];
 var HEADERS_DISPOSITIVOS = ['id', 'cliente_id', 'tipo', 'modelo', 'mac', 'notas'];
 var HEADERS_PAGOS = ['id', 'cliente_id', 'fecha', 'monto', 'meses', 'cubre_hasta', 'registrado_por'];
 var CAMPOS_FECHA_ = {
@@ -264,6 +265,9 @@ function normalizarCliente_(input) {
   };
   if (viene_(input, 'exento')) {
     copiarSiViene_(cliente, input, 'exento', esPromo_(input.exento) ? 'SI' : 'NO');
+  }
+  if (viene_(input, 'archivado')) {
+    copiarSiViene_(cliente, input, 'archivado', esPromo_(input.archivado) ? 'SI' : 'NO');
   }
   if (viene_(input, 'fecha_ultimo_pago')) {
     if (ultimoCrudo && !ultimo) throw new Error('La fecha del último pago no es válida.');

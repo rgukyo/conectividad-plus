@@ -1,8 +1,13 @@
 /**
  * Conectividad Plus — puente entre la app y el Google Sheet.
- * Versión: 2. El modelo del equipo puede ir vacío. Las columnas exento y archivado van al final
- * de Clientes (SI o NO, igual que promo) y se agregan solas si la hoja todavía no las tiene.
- * archivado vacío cuenta como activo. No borra pagos ni equipos.
+ * Versión: 3. El modelo del equipo puede ir vacío. Al final de Clientes van exento,
+ * archivado (SI o NO; vacío = activo) y reactivacion (número; vacío = 0).
+ * Se agregan solas si la hoja todavía no las tiene. Archivar no borra pagos ni equipos.
+ *
+ * Para publicar SIN cambiar la URL /exec:
+ * 1. Extensiones → Apps Script. Borra lo que haya y pega este archivo completo.
+ * 2. Implementar → Administrar implementaciones → lápiz → Versión: Nueva versión → Implementar.
+ * 3. No toques la URL que termina en /exec. En la app: Ajustes → Actualizar.
  * Después de pegar este archivo hay que publicar una implementación nueva.
  *
  * Cómo publicarlo (también está en el README):
@@ -21,7 +26,7 @@ var PRECIO_EQUIPO = 30;
 var DESCUENTO_PAR = 10;
 var DIA_CORTE = 15;
 var TIPOS_ = ['Celular', 'Tablet', 'iPad', 'TV Smart', 'PC', 'Otro'];
-var HEADERS_CLIENTES = ['id', 'nombre', 'celular', 'area', 'promo', 'fecha_ultimo_pago', 'proximo_vencimiento', 'meses_pagados', 'notas', 'exento', 'archivado'];
+var HEADERS_CLIENTES = ['id', 'nombre', 'celular', 'area', 'promo', 'fecha_ultimo_pago', 'proximo_vencimiento', 'meses_pagados', 'notas', 'exento', 'archivado', 'reactivacion'];
 var HEADERS_DISPOSITIVOS = ['id', 'cliente_id', 'tipo', 'modelo', 'mac', 'notas'];
 var HEADERS_PAGOS = ['id', 'cliente_id', 'fecha', 'monto', 'meses', 'cubre_hasta', 'registrado_por'];
 var CAMPOS_FECHA_ = {
@@ -218,8 +223,9 @@ function registrarPago_(req) {
     if (String(equipos[i].cliente_id || '') === clienteId) n++;
   }
   var mensual = esExento_(cliente) ? 0 : precioMensual_(n, cliente.promo);
+  var cargo = cargoReactivacion_(cliente);
   var monto;
-  if (entrada.monto === '' || entrada.monto == null) monto = mensual * meses;
+  if (entrada.monto === '' || entrada.monto == null) monto = mensual * meses + cargo;
   else monto = Number(entrada.monto);
   if (!isFinite(monto) || monto < 0) throw new Error('Monto inválido');
   monto = Math.round(monto * 100) / 100;
@@ -239,6 +245,7 @@ function registrarPago_(req) {
   cliente.fecha_ultimo_pago = pago.fecha;
   cliente.proximo_vencimiento = cubre;
   cliente.meses_pagados = previos + meses;
+  if (pagoCubreReactivacion_(monto, mensual, meses, cargo)) cliente.reactivacion = 0;
   escribirFila_(shClientes, HEADERS_CLIENTES, row, cliente);
   return { pago: pago, cliente: cliente };
 }
@@ -268,6 +275,11 @@ function normalizarCliente_(input) {
   }
   if (viene_(input, 'archivado')) {
     copiarSiViene_(cliente, input, 'archivado', esPromo_(input.archivado) ? 'SI' : 'NO');
+  }
+  if (viene_(input, 'reactivacion')) {
+    var reactivacion = input.reactivacion === '' || input.reactivacion == null ? 0 : Number(input.reactivacion);
+    if (!isFinite(reactivacion) || reactivacion < 0) throw new Error('El cargo de reactivación no es válido.');
+    copiarSiViene_(cliente, input, 'reactivacion', Math.round(reactivacion * 100) / 100);
   }
   if (viene_(input, 'fecha_ultimo_pago')) {
     if (ultimoCrudo && !ultimo) throw new Error('La fecha del último pago no es válida.');
@@ -329,6 +341,29 @@ function esPromo_(promo) {
 function esExento_(cliente) {
   if (cliente && typeof cliente === 'object') return esPromo_(cliente.exento);
   return esPromo_(cliente);
+}
+
+function esArchivado_(cliente) {
+  return !!(cliente && typeof cliente === 'object' && esPromo_(cliente.archivado));
+}
+
+function cargoReactivacion_(cliente) {
+  if (esArchivado_(cliente)) return 0;
+  var n = Number(cliente && cliente.reactivacion);
+  if (!isFinite(n) || n <= 0) return 0;
+  return Math.round(n * 100) / 100;
+}
+
+function pagoCubreReactivacion_(monto, mensual, meses, cargo) {
+  if (!(cargo > 0)) return false;
+  var pagado = Number(monto);
+  if (!isFinite(pagado)) return false;
+  var n = parseInt(meses, 10);
+  if (!n || n < 1) n = 1;
+  var base = (Number(mensual) || 0) * n;
+  if (pagado + 0.001 >= base + cargo) return true;
+  if (pagado + 0.001 >= cargo && pagado + 0.001 < base) return true;
+  return false;
 }
 
 function precioMensual_(n, promo) {
@@ -502,7 +537,7 @@ function formatearHoja_(sh, headers) {
     var campo = headers[i];
     var rango = sh.getRange(1, i + 1, alto, 1);
     if (CAMPOS_FECHA_[campo]) rango.setNumberFormat('yyyy-mm-dd');
-    else if (campo === 'monto' || campo === 'meses' || campo === 'meses_pagados') rango.setNumberFormat('0.##');
+    else if (campo === 'monto' || campo === 'meses' || campo === 'meses_pagados' || campo === 'reactivacion') rango.setNumberFormat('0.##');
     else if (campo === 'id' || campo === 'cliente_id' || campo === 'celular' || campo === 'mac') rango.setNumberFormat('@');
   }
 }
@@ -532,7 +567,7 @@ function filaAObjeto_(headers, row) {
     var campo = headers[c];
     var value = row[c];
     if (CAMPOS_FECHA_[campo]) obj[campo] = valorFecha_(value);
-    else if (campo === 'monto' || campo === 'meses' || campo === 'meses_pagados') {
+    else if (campo === 'monto' || campo === 'meses' || campo === 'meses_pagados' || campo === 'reactivacion') {
       if (value === '' || value == null) obj[campo] = '';
       else obj[campo] = isFinite(Number(value)) ? Number(value) : '';
     } else obj[campo] = value == null ? '' : String(value).trim();
@@ -569,7 +604,7 @@ function escribirFila_(sh, headers, row, obj) {
     var value = obj[campo];
     if (value == null || value === '') fila.push('');
     else if (CAMPOS_FECHA_[campo]) fila.push(fechaACelda_(value));
-    else if (campo === 'monto' || campo === 'meses' || campo === 'meses_pagados') fila.push(Number(value));
+    else if (campo === 'monto' || campo === 'meses' || campo === 'meses_pagados' || campo === 'reactivacion') fila.push(Number(value));
     else fila.push(textoSeguro_(value));
   }
   sh.getRange(row, 1, 1, headers.length).setValues([fila]);

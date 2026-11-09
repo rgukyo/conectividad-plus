@@ -69,7 +69,15 @@ En la lista, **Por vencer** significa que faltan 5 días o menos. **Vencido** es
 
 El inicio no muestra importes. **Cobros** se abre con «Consultar cobros». El total cobrado suma los pagos registrados en el periodo elegido, también los de quien después se archivó. El pendiente estimado del mes en curso va aparte: es un mes de quienes vencen en el mes, de quienes ya vencieron y de quienes no tienen fecha. No multiplica meses atrasados, no es un ingreso y no se suma al cobrado. Un cliente exento, o uno archivado, no entra en ese pendiente ni en el conteo de activos ni en el de vencidos. Si alguien tiene fecha de pago y no hay renglón en Pagos, la pantalla lo dice y no inventa el monto.
 
-**Archivar cliente** lo quita de la lista activa, con confirmación. No borra su registro, sus pagos, sus equipos ni sus notas. En Clientes, el filtro **Archivados** lo restaura si regresa. Un renglón viejo sin esa columna sigue activo. Para que se guarde en la hoja hay que publicar una versión nueva del Apps Script; la columna `archivado` se agrega sola al final.
+**Archivar cliente** lo quita de la lista activa, con confirmación. No borra su registro, sus pagos, sus equipos ni sus notas. Solo se ve en el filtro **Archivados**. Mientras está archivado, su pendiente queda en cero. Al **Reactivar**, vuelve a la lista activa y queda el aviso «Debe pagar $20 de reactivación»: son $20 una sola vez, no cada mes, y se pueden registrar como pago. Un renglón viejo sin la columna sigue activo.
+
+El script completo está en `apps-script/Code.gs`. Si archivar no se queda al recargar, el script publicado es el viejo. Para publicarlo sin cambiar la URL `/exec`:
+
+1. En la hoja: Extensiones → Apps Script. Borra el código y pega todo `apps-script/Code.gs`.
+2. Implementar → Administrar implementaciones → lápiz → Versión **Nueva versión** → Implementar.
+3. No cambies la URL que termina en `/exec`. En la app, Ajustes → Actualizar.
+
+Si la hoja no devuelve la marca, la app no dice que se archivó.
 
 ## Importar lo que ya tienen anotado
 

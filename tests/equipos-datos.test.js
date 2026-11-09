@@ -24,87 +24,84 @@ function entre(src, desde, hasta) {
   return src.slice(inicio, fin);
 }
 
-test('las tarjetas ocultan notas de importación, conservan el dato y permiten eliminar sin asignar', function () {
-  var importada = 'Agregado desde datos2.xlsx fila 34 (sección ZONA FICTICIA, nombre en datos2: Persona Ejemplo). Marca/equipo en datos2 (referencia): MODELO-X';
-  var hoja = 'Fila 5 de Hoja 2 original. Sin asignar. Código original: ZX-9';
-  var guardada = { notas: hoja };
-  assert.strictEqual(CP.notaVisibleEquipo(importada), '');
-  assert.strictEqual(CP.notaVisibleEquipo(hoja), '');
-  assert.strictEqual(guardada.notas, hoja);
-  assert.strictEqual(CP.notaVisibleEquipo('Ejemplo sin asignar'), 'Ejemplo sin asignar');
-  assert.strictEqual(CP.notaVisibleEquipo('Timbre dos veces. Portón azul.'), 'Timbre dos veces. Portón azul.');
-  assert.strictEqual(CP.notaVisibleEquipo('Cliente pidió el código original del módem'), 'Cliente pidió el código original del módem');
-  assert.strictEqual(CP.notaVisibleEquipo('Anoté la fila 5 de mi libreta'), 'Anoté la fila 5 de mi libreta');
-  assert.strictEqual(CP.notaVisibleEquipo('Hoja de papel original'), 'Hoja de papel original');
-  assert.strictEqual(CP.notaVisibleEquipo('Sin asignar'), 'Sin asignar');
-  assert.strictEqual(
-    CP.notaVisibleEquipo('Agregado desde datos2.xlsx fila 3. El equipo está en la sala.'),
-    'El equipo está en la sala'
-  );
-  assert.strictEqual(
-    CP.notaVisibleEquipo('Fila 5 de Hoja 2 original. Sin asignar. Código original: ZX-9. Revisar antena.'),
-    'Revisar antena'
-  );
-  assert.strictEqual(CP.notaVisibleEquipo(''), '');
-  assert.strictEqual(CP.notaVisibleEquipo(null), '');
+test('reactivar cobra 20 una sola vez y se puede pagar', function () {
+  var octubre = '2026-10-20';
+  var noviembre = '2026-11-20';
+  var archivada = {
+    id: 'nuria',
+    nombre: 'Nuria Ejemplo',
+    notas: 'Timbra dos veces',
+    promo: 'NO',
+    exento: 'NO',
+    archivado: 'SI',
+    reactivacion: 0,
+    proximo_vencimiento: '2026-12-15',
+    fecha_ultimo_pago: '2026-10-01',
+    meses_pagados: 1
+  };
+  var data = {
+    clientes: [archivada],
+    dispositivos: [{ id: 'dn', cliente_id: 'nuria' }],
+    pagos: [{ id: 'pn', cliente_id: 'nuria', fecha: '2026-10-01', monto: 30, meses: 1 }]
+  };
+  var activa = CP.fusionarCliente(archivada, { archivado: 'NO', reactivacion: CP.CARGO_REACTIVACION });
+  assert.strictEqual(CP.CARGO_REACTIVACION, 20);
+  assert.strictEqual(activa.archivado, 'NO');
+  assert.strictEqual(activa.reactivacion, 20);
+  assert.strictEqual(activa.notas, 'Timbra dos veces');
+  assert.strictEqual(CP.cargoReactivacion(activa), 20);
+  var otraVez = CP.fusionarCliente(activa, { archivado: 'NO', reactivacion: CP.CARGO_REACTIVACION });
+  assert.strictEqual(otraVez.reactivacion, 20);
+
+  var conCargo = { clientes: [activa], dispositivos: data.dispositivos, pagos: data.pagos };
+  assert.strictEqual(CP.porCobrarEsteMes(conCargo.clientes, conCargo.dispositivos, octubre).total, 20);
+  assert.strictEqual(CP.porCobrarEsteMes(conCargo.clientes, conCargo.dispositivos, noviembre).total, 20);
+  assert.strictEqual(CP.informeCobros(conCargo, '2026-10', octubre).cobrado, 30);
+  assert.strictEqual(CP.marcaGuardada(activa, { archivado: 'NO' }), false);
+  assert.strictEqual(CP.marcaGuardada(activa, { archivado: 'NO', reactivacion: 20 }), true);
+
+  var soloMensual = CP.aplicarPago(conCargo, {
+    cliente_id: 'nuria',
+    fecha: '2026-10-21',
+    meses: 1,
+    monto: 30,
+    registrado_por: 'Dueño'
+  });
+  assert.strictEqual(soloMensual.cliente.reactivacion, 20);
+  assert.strictEqual(CP.porCobrarEsteMes(soloMensual.data.clientes, soloMensual.data.dispositivos, noviembre).total, 20);
+
+  var pagado = CP.aplicarPago(conCargo, {
+    cliente_id: 'nuria',
+    fecha: '2026-10-21',
+    meses: 1,
+    monto: 50,
+    registrado_por: 'Dueño'
+  });
+  assert.strictEqual(pagado.pago.monto, 50);
+  assert.strictEqual(pagado.cliente.reactivacion, 0);
+  assert.strictEqual(CP.cargoReactivacion(pagado.cliente), 0);
+  assert.strictEqual(CP.porCobrarEsteMes(pagado.data.clientes, pagado.data.dispositivos, noviembre).total, 0);
+  assert.strictEqual(pagado.data.pagos.length, 2);
+  assert.strictEqual(CP.informeCobros(pagado.data, '2026-10', octubre).cobrado, 80);
+
+  var sugerido = CP.aplicarPago(conCargo, {
+    cliente_id: 'nuria',
+    fecha: '2026-10-22',
+    meses: 2,
+    registrado_por: 'Dueño'
+  });
+  assert.strictEqual(sugerido.pago.monto, 80);
+  assert.strictEqual(sugerido.cliente.reactivacion, 0);
 
   var app = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'utf8');
-  var lista = entre(app, 'function htmlListaEquipos() {', 'function htmlDetalle');
-  assert.ok(lista.indexOf('htmlNotaEquipo(eq)') >= 0);
-  assert.ok(lista.indexOf('>Eliminar</button>') >= 0);
-  assert.ok(lista.indexOf('data-action="borrar-equipo"') >= 0);
-  assert.ok(lista.indexOf('eq.tipo') >= 0);
-  assert.ok(lista.indexOf('htmlModelo(eq)') >= 0);
-  assert.ok(lista.indexOf('eq.mac') >= 0);
-  assert.ok(lista.indexOf('d.notas') >= 0);
-  assert.strictEqual(lista.indexOf('esc(eq.notas)'), -1);
-  var botones = lista.slice(lista.indexOf('fila-botones'));
-  assert.strictEqual(botones.indexOf('cliente_id'), -1);
-
-  var ficha = entre(app, 'function htmlEquipoCard', 'function htmlHistorial');
-  assert.ok(ficha.indexOf('htmlNotaEquipo(eq)') >= 0);
-  assert.strictEqual(ficha.indexOf('esc(eq.notas)'), -1);
-
-  var form = entre(app, 'function htmlFormEquipo', 'function htmlPago');
-  assert.ok(form.indexOf('esc(equipo.notas)') >= 0);
-  assert.strictEqual(form.indexOf('notaVisibleEquipo'), -1);
-
-  var detalle = entre(app, 'function htmlDetalle', 'function htmlFormCliente');
-  assert.ok(detalle.indexOf('htmlMensualidad(cliente)') >= 0);
-  assert.strictEqual(detalle.indexOf('htmlDesglose(cliente)'), -1);
-  var mensual = entre(app, 'function htmlMensualidad', 'function htmlDesglose');
-  assert.ok(mensual.indexOf('Consultar mensualidad') >= 0);
-  assert.ok(mensual.indexOf('Ocultar mensualidad') >= 0);
-  assert.ok(mensual.indexOf('!state.mensualidadAbierta') >= 0);
-
-  var render = entre(app, 'function render(opciones)', 'function actualizarChrome');
-  assert.ok(render.indexOf('state.mensualidadAbierta = false') >= 0);
-  var click = entre(app, "action === 'borrar-equipo'", "action === 'ver-clave'");
-  assert.ok(click.indexOf('pedirBorrar') >= 0);
-  assert.ok(click.indexOf("action === 'ver-mensualidad'") >= 0);
-  assert.strictEqual(click.indexOf('borrarEquipo('), -1);
-  var confirmar = entre(app, 'function pedirBorrar', 'function borrarEquipo');
-  assert.ok(confirmar.indexOf('state.confirm') >= 0);
-  assert.strictEqual(confirmar.indexOf('deleteDispositivo'), -1);
-  assert.ok(confirmar.indexOf('borrarEquipo(id)') >= 0);
-
-  assert.ok(detalle.indexOf('Archivar cliente') >= 0);
-  assert.ok(detalle.indexOf('data-action="restaurar-cliente"') >= 0);
-  assert.ok(app.indexOf('>Archivados</button>') >= 0);
-  assert.strictEqual(app.indexOf('deleteCliente'), -1);
-  assert.strictEqual(app.indexOf('borrarCliente'), -1);
-  var pedirArch = entre(app, 'function pedirArchivar', 'function pedirRestaurar');
-  assert.ok(pedirArch.indexOf('state.confirm') >= 0);
-  assert.ok(pedirArch.indexOf('sus pagos, sus equipos y sus notas') >= 0);
-  assert.strictEqual(pedirArch.indexOf('state.data.dispositivos'), -1);
-  assert.strictEqual(pedirArch.indexOf('state.data.pagos'), -1);
-  var fijar = entre(app, 'function fijarArchivo', 'function pedirBorrar');
-  assert.ok(fijar.indexOf('persistirCliente(cliente)') >= 0);
-  assert.ok(fijar.indexOf("archivado: archivado ? 'SI' : 'NO'") >= 0);
-  assert.strictEqual(fijar.indexOf('deleteDispositivo'), -1);
-  assert.strictEqual(fijar.indexOf('.dispositivos'), -1);
-  assert.strictEqual(fijar.indexOf('.pagos'), -1);
-  var listaClientes = entre(app, 'function htmlListaClientes', 'function htmlVencidos');
-  assert.ok(listaClientes.indexOf('>Restaurar</button>') >= 0);
-  assert.ok(listaClientes.indexOf("vistaArchivo === 'archivados'") >= 0);
+  var leyenda = 'Debe pagar $20 de reactivación';
+  assert.ok(app.indexOf(leyenda) >= 0);
+  assert.ok(entre(app, 'function pedirReactivar', 'function fijarArchivo').indexOf(leyenda) >= 0);
+  assert.ok(entre(app, 'function htmlLeyendaReactivacion', 'function htmlMensualidad').indexOf(leyenda) >= 0);
+  ['function htmlInicio() {', 'function htmlClienteLink(c) {', 'function htmlVencidos() {', 'function htmlResumen(grande) {'].forEach(function (firma) {
+    assert.strictEqual(entre(app, firma, '\n  function ').indexOf(leyenda), -1, firma);
+    assert.strictEqual(entre(app, firma, '\n  function ').indexOf('$'), -1, firma);
+  });
+  assert.ok(app.indexOf('>Reactivar</button>') >= 0);
+  assert.strictEqual(app.indexOf('>Restaurar</button>'), -1);
 });

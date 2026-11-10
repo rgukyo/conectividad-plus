@@ -1,5 +1,5 @@
 /* Conectividad Plus. La misma cadena VERSION está en js/app.js. */
-var VERSION = '9';
+var VERSION = '10';
 var CACHE = 'conectividad-plus-' + VERSION;
 var SHELL = [
   './',

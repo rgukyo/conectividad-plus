@@ -62,7 +62,7 @@ test('el operador no archiva, no borra y no ve montos', function () {
   assert.strictEqual(admin.rol, 'admin');
   assert.strictEqual(admin.nombre, 'Roger García');
   assert.throws(function () { s.usuarioDe_('otra-clave'); }, /Clave incorrecta/);
-  s.setUsuario_({ nombre: 'Jorge Daniel Colli Cocom', rol: 'operador', clave: 'clave-jorge-larga' }, admin);
+  s.setUsuario_({ nombre: 'Jorge Daniel Colli Cocom', rol: 'operador', claveUsuario: 'clave-jorge-larga', clave: 'clave-roger-admin' }, admin);
   assert.strictEqual(s.props.USUARIOS.indexOf('clave-jorge-larga'), -1);
   var op = s.usuarioDe_('clave-jorge-larga');
   assert.strictEqual(op.rol, 'operador');

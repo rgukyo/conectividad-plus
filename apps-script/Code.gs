@@ -173,7 +173,7 @@ function setUsuario_(req, usuario) {
   exigirAdmin_(usuario);
   var nombre = String(req.nombre || '').trim();
   var rol = String(req.rol || 'operador').trim().toLowerCase();
-  var clave = req.clave == null ? '' : String(req.clave);
+  var clave = req.claveUsuario == null ? '' : String(req.claveUsuario);
   if (!nombre) throw new Error('Escribe el nombre.');
   if (nombre.length > 120) throw new Error('El nombre es demasiado largo.');
   if (rol !== 'operador' && rol !== 'admin') throw new Error('Rol no válido.');

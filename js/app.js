@@ -7,7 +7,7 @@
   var K_DEMO = 'cp.demo.v1';
   var K_COLA = 'cp.cola.v1';
   var K_RECORDATORIOS = 'cp.recordatorios.v1';
-  var VERSION = '10';
+  var VERSION = '11';
 
   var state = {
     settings: { url: '', clave: '', nombre: '' },
@@ -286,7 +286,7 @@
   function api(action, extra) {
     var url = state.settings.url;
     if (!url) return Promise.reject(new Error('Falta la dirección del script.'));
-    var body = Object.assign({ clave: state.settings.clave, action: action }, extra || {});
+    var body = Object.assign({ action: action }, extra || {}, { clave: state.settings.clave });
     return fetchConTiempo(url, {
       method: 'POST',
       redirect: 'follow',
@@ -1860,7 +1860,7 @@
     if (sinRed()) { toast(CP.MENSAJE_SIN_INTERNET); return; }
     var nombre = val(form, 'nombre').trim();
     var clave = val(form, 'clave');
-    api('setUsuario', { nombre: nombre, rol: 'operador', clave: clave }).then(function (data) {
+    api('setUsuario', { nombre: nombre, rol: 'operador', claveUsuario: clave }).then(function (data) {
       state.usuarios = (data && data.usuarios) || [];
       form.reset();
       toast('Usuario guardado.');

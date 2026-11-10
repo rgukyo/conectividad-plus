@@ -5,7 +5,9 @@
   var K_SETTINGS = 'cp.settings.v1';
   var K_CACHE = 'cp.cache.v1';
   var K_DEMO = 'cp.demo.v1';
-  var VERSION = '8';
+  var K_COLA = 'cp.cola.v1';
+  var K_RECORDATORIOS = 'cp.recordatorios.v1';
+  var VERSION = '9';
 
   var state = {
     settings: { url: '', clave: '', nombre: '' },
@@ -29,7 +31,12 @@
     hayVersionNueva: false,
     swReg: null,
     pidioActualizar: false,
-    recargaHecha: false
+    recargaHecha: false,
+    cola: [],
+    plantillaAviso: 'mantenimiento',
+    textoAviso: '',
+    areaAviso: '',
+    avisosHechos: {}
   };
 
   var ultimaRuta = null;
@@ -37,7 +44,10 @@
 
   function arrancar() {
     state.settings = leerSettings();
+    state.cola = leerCola();
+    state.textoAviso = textoPlantilla('mantenimiento');
     window.addEventListener('hashchange', function () { render(); });
+    window.addEventListener('online', function () { reintentarCola(); });
     document.body.addEventListener('click', onClick);
     document.body.addEventListener('submit', onSubmit);
     document.body.addEventListener('input', onInput);
@@ -56,7 +66,10 @@
     if (!('serviceWorker' in navigator)) return;
     navigator.serviceWorker.addEventListener('controllerchange', alCambiarControl);
     document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'visible') pedirRevision();
+      if (document.visibilityState === 'visible') {
+        pedirRevision();
+        if ((location.hash || '#/') === '#/' || location.hash === '#/avisos') render();
+      }
     });
     navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(function (reg) {
       state.swReg = reg;
@@ -364,7 +377,7 @@
 
   function tabActual() {
     var a = rutaActual().parts[0] || 'inicio';
-    if (a === 'clientes' || a === 'vencidos' || a === 'equipos' || a === 'ajustes' || a === 'cobros') return a;
+    if (a === 'clientes' || a === 'vencidos' || a === 'equipos' || a === 'ajustes' || a === 'cobros' || a === 'avisos') return a;
     return 'inicio';
   }
 
@@ -432,6 +445,12 @@
     if (state.hayVersionNueva) {
       partes.push('<p class="aviso actualizacion"><button type="button" class="btn primary block" data-action="aplicar-version">Hay una versión nueva — Actualizar</button></p>');
     }
+    if (state.cola.length) {
+      var nCola = state.cola.length;
+      partes.push('<div class="aviso warn"><p>' + CP.MENSAJE_SIN_INTERNET + '. ' + nCola +
+        (nCola === 1 ? ' pendiente.' : ' pendientes.') + '</p>' +
+        '<button type="button" class="btn primary block" data-action="reintentar-cola">Reintentar pendientes</button></div>');
+    }
     if (state.modo === 'demo') {
       partes.push('<p class="aviso">Modo demostración con datos ficticios. Nada de esto se guarda en la hoja.</p>');
     } else if (state.scriptViejo) {
@@ -478,6 +497,7 @@
     }
     if (a === 'equipos') return htmlEquipos();
     if (a === 'cobros') return htmlCobros();
+    if (a === 'avisos') return htmlModuloAvisos();
     if (a === 'ajustes') return htmlAjustes();
     return htmlInicio();
   }
@@ -504,7 +524,9 @@
       htmlResumen(true) +
       '<p><a class="btn primary block" href="#/clientes/nuevo">Nuevo cliente</a></p>' +
       '<p><a class="btn ghost block" href="#/cobros">Consultar cobros</a></p>' +
+      '<p><a class="btn ghost block" href="#/avisos">Avisos</a></p>' +
       (state.settings.url ? '<p><button type="button" class="btn ghost block" data-action="actualizar">Actualizar</button></p>' : '') +
+      htmlRecordatorios(hoy) +
       htmlGrupo('Vencidos', ordenarPorNombre(vencidos), 'Nadie está vencido.') +
       (pronto.length ? htmlGrupo('Por vencer', ordenarPorNombre(pronto)) : '') +
       (sinFecha.length ? htmlGrupo('Sin fecha de pago', ordenarPorNombre(sinFecha)) : '');
@@ -751,8 +773,58 @@
       '<button class="btn ghost block" type="button" data-action="reset-demo">Restablecer datos de demostración</button>' +
       '</form>' +
       '<h2>En el teléfono</h2>' +
+      '<p><a class="btn ghost block" href="#/avisos">Avisos</a></p>' +
       '<p class="ayuda">Chrome → menú → Instalar aplicación, o Agregar a pantalla principal. Sin señal se abre la última copia, solo para consultar.</p>' +
       (state.cacheEn ? '<p class="ayuda">Última copia en línea: ' + esc(state.cacheEn) + '</p>' : '');
+  }
+
+  function htmlRecordatorios(hoy) {
+    var lista = CP.recordatoriosHoy(state.data.clientes, hoy);
+    if (!lista.length) return '';
+    var marcas = leerRecordatorios(hoy);
+    return '<h2>Recordatorios de hoy</h2><ul class="lista">' + lista.map(function (c) {
+      var avisado = !!marcas[c.id];
+      var texto = CP.mensajeRecordatorio(c.nombre);
+      var url = CP.enlaceWhatsApp(c.celular, texto);
+      var boton = avisado
+        ? '<p class="muted">Avisado</p>'
+        : (url
+          ? '<a class="btn primary block" href="' + esc(url) + '" target="_blank" rel="noopener" data-action="marcar-recordatorio" data-id="' + esc(c.id) + '">Avisar por WhatsApp</a>'
+          : '<p class="aviso warn">El celular no tiene 10 dígitos.</p>');
+      return '<li class="card"><a class="nombre-ficha" href="#/clientes/' + seg(c.id) + '"><strong>' + esc(c.nombre) + '</strong></a>' +
+        '<p class="muted">' + esc(c.area || 'Sin área') + '</p>' + boton + '</li>';
+    }).join('') + '</ul>';
+  }
+
+  function htmlModuloAvisos() {
+    var plantillas = CP.PLANTILLAS_AVISO.map(function (p) {
+      return '<option value="' + esc(p.id) + '"' + (p.id === state.plantillaAviso ? ' selected' : '') + '>' + esc(p.nombre) + '</option>';
+    }).join('');
+    var zonas = areasDe(CP.destinatariosAviso(state.data.clientes, '')).map(function (area) {
+      return '<option value="' + esc(area) + '"' + (area === state.areaAviso ? ' selected' : '') + '>' + esc(area) + '</option>';
+    }).join('');
+    var lista = CP.destinatariosAviso(state.data.clientes, state.areaAviso);
+    var conteo = CP.conteoAvisos(lista, state.avisosHechos);
+    var filas = lista.length ? lista.map(function (c) {
+      var texto = CP.mensajeAviso(state.textoAviso, c.nombre);
+      var url = CP.enlaceWhatsApp(c.celular, texto);
+      var abierto = !!state.avisosHechos[c.id];
+      var boton = abierto
+        ? '<p class="muted">Abierto</p>'
+        : (url
+          ? '<a class="btn primary block" href="' + esc(url) + '" target="_blank" rel="noopener" data-action="marcar-aviso" data-id="' + esc(c.id) + '">Abrir WhatsApp</a>'
+          : '<p class="aviso warn">El celular no tiene 10 dígitos.</p>');
+      return '<li class="card"><strong>' + esc(c.nombre) + '</strong><p class="muted">' + esc(c.area || 'Sin área') + '</p>' + boton + '</li>';
+    }).join('') : '<li><p class="vacio">No hay destinatarios activos.</p></li>';
+    return htmlVolver('#/', 'Inicio') +
+      '<h1>Avisos</h1>' +
+      '<label class="campo">Plantilla<select id="plantilla-aviso">' + plantillas + '</select></label>' +
+      '<label class="campo">Mensaje<textarea id="texto-aviso" maxlength="1000">' + esc(state.textoAviso) + '</textarea></label>' +
+      '<p class="ayuda">Usa {nombre} y se cambia por cada cliente. No incluyas montos.</p>' +
+      '<label class="campo">Destinatarios<select id="area-aviso"><option value="">Todos los activos</option>' + zonas + '</select></label>' +
+      '<p class="ayuda">' + esc(conteo.texto) + '</p>' +
+      '<p><button type="button" class="btn ghost block" data-action="copiar-numeros">Copiar números</button></p>' +
+      '<ul class="lista">' + filas + '</ul>';
   }
 
   function htmlResumen(grande) {
@@ -1060,6 +1132,24 @@
       });
       return;
     }
+    if (action === 'reintentar-cola') {
+      e.preventDefault();
+      reintentarCola();
+      return;
+    }
+    if (action === 'marcar-recordatorio') {
+      marcarRecordatorio(btn.getAttribute('data-id'));
+      return;
+    }
+    if (action === 'marcar-aviso') {
+      state.avisosHechos[btn.getAttribute('data-id')] = true;
+      return;
+    }
+    if (action === 'copiar-numeros') {
+      e.preventDefault();
+      copiarNumerosAviso();
+      return;
+    }
     if (action === 'aplicar-version') {
       e.preventDefault();
       aplicarActualizacion();
@@ -1100,6 +1190,10 @@
       render({ soloLista: true });
       return;
     }
+    if (el.id === 'texto-aviso') {
+      state.textoAviso = el.value;
+      return;
+    }
     if (el.name === 'mac') {
       var ayuda = document.getElementById('mac-ayuda');
       var norm = CP.normalizarMac(el.value);
@@ -1115,6 +1209,19 @@
     var el = e.target;
     if (el.id === 'periodo-cobros') {
       state.periodoCobro = el.value;
+      render();
+      return;
+    }
+    if (el.id === 'plantilla-aviso') {
+      state.plantillaAviso = el.value;
+      state.textoAviso = textoPlantilla(el.value);
+      state.avisosHechos = {};
+      render();
+      return;
+    }
+    if (el.id === 'area-aviso') {
+      state.areaAviso = el.value;
+      state.avisosHechos = {};
       render();
       return;
     }
@@ -1254,7 +1361,7 @@
     var boton = form.querySelector('[type="submit"]');
     if (!boton) return;
     var guardando = activo !== false;
-    boton.disabled = guardando || state.soloLectura;
+    boton.disabled = guardando || (state.soloLectura && !state.settings.url);
     if (guardando) boton.textContent = 'Guardando…';
     else if (idFormulario(form) === 'form-pago') {
       var clientePago = buscarCliente(val(form, 'cliente_id'));
@@ -1265,17 +1372,29 @@
 
   function persistirCliente(cliente) {
     if (state.modo === 'demo') {
+      var guardadoDemo = CP.fusionarCliente(buscarCliente(cliente.id), cliente);
+      if (!guardadoDemo.id) guardadoDemo.id = cliente.id;
+      state.data.clientes = upsert(state.data.clientes, guardadoDemo);
+      guardarDemo();
+      return Promise.resolve(guardadoDemo);
+    }
+    function dejarPendiente() {
       var guardado = CP.fusionarCliente(buscarCliente(cliente.id), cliente);
       if (!guardado.id) guardado.id = cliente.id;
       state.data.clientes = upsert(state.data.clientes, guardado);
-      guardarDemo();
-      return Promise.resolve(guardado);
+      guardarCache(state.data);
+      encolar({ tipo: 'cliente', cliente: guardado });
+      throw new Error(CP.MENSAJE_SIN_INTERNET);
     }
+    if (sinRed()) return Promise.resolve().then(dejarPendiente);
     return api('upsertCliente', { cliente: cliente }).then(function (res) {
       var guardado = normalizarRemoto({ clientes: [res.cliente] }).clientes[0];
       state.data.clientes = upsert(state.data.clientes, guardado);
       guardarCache(state.data);
       return guardado;
+    }).catch(function (err) {
+      if (!esFalloDeRed(err)) throw err;
+      dejarPendiente();
     });
   }
 
@@ -1292,18 +1411,34 @@
     if (state.modo === 'demo') {
       return Promise.resolve().then(function () { despues(dispositivo); });
     }
+    function dejarPendiente() {
+      state.guardando = false;
+      state.data.dispositivos = upsert(state.data.dispositivos, dispositivo);
+      guardarCache(state.data);
+      encolar({ tipo: 'equipo', dispositivo: dispositivo });
+      toast(CP.MENSAJE_SIN_INTERNET);
+      render();
+    }
+    if (sinRed()) {
+      dejarPendiente();
+      return Promise.resolve();
+    }
     state.guardando = true;
     return api('upsertDispositivo', { dispositivo: dispositivo }).then(function (res) {
       var guardado = normalizarRemoto({ dispositivos: [res.dispositivo] }).dispositivos[0];
       despues(guardado, res.advertencia);
     }).catch(function (err) {
       state.guardando = false;
-      toast(mensaje(err));
+      if (!esFalloDeRed(err)) {
+        toast(mensaje(err));
+        return;
+      }
+      dejarPendiente();
     });
   }
 
   function asignarEquipo(id, clienteId) {
-    if (state.soloLectura) return Promise.reject(new Error('Sin conexión. No se puede guardar.'));
+    if (state.soloLectura && !state.settings.url) return Promise.reject(new Error(CP.MENSAJE_SIN_INTERNET));
     var eq = buscarEquipo(id);
     if (!eq) return Promise.reject(new Error('Equipo no encontrado'));
     var copia = Object.assign({}, eq, { cliente_id: clienteId });
@@ -1315,6 +1450,17 @@
       render();
       return Promise.resolve();
     }
+    function dejarPendiente() {
+      state.data.dispositivos = upsert(state.data.dispositivos, copia);
+      guardarCache(state.data);
+      encolar({ tipo: 'equipo', dispositivo: copia });
+      toast(CP.MENSAJE_SIN_INTERNET);
+      render();
+    }
+    if (sinRed()) {
+      dejarPendiente();
+      return Promise.resolve();
+    }
     return api('upsertDispositivo', { dispositivo: copia }).then(function (res) {
       var guardado = normalizarRemoto({ dispositivos: [res.dispositivo] }).dispositivos[0];
       state.data.dispositivos = upsert(state.data.dispositivos, guardado);
@@ -1322,6 +1468,9 @@
       var dueno = buscarCliente(guardado.cliente_id);
       toast('Asignado a ' + (dueno ? dueno.nombre : 'cliente') + '.');
       render();
+    }).catch(function (err) {
+      if (!esFalloDeRed(err)) throw err;
+      dejarPendiente();
     });
   }
 
@@ -1384,7 +1533,7 @@
   }
 
   function borrarEquipo(id) {
-    if (state.soloLectura) return Promise.reject(new Error('Sin conexión. No se puede guardar.'));
+    if (state.soloLectura && !state.settings.url) return Promise.reject(new Error(CP.MENSAJE_SIN_INTERNET));
     function listo() {
       state.data.dispositivos = state.data.dispositivos.filter(function (d) { return String(d.id) !== String(id); });
       if (state.modo === 'demo') guardarDemo();
@@ -1398,7 +1547,21 @@
       listo();
       return Promise.resolve();
     }
-    return api('deleteDispositivo', { id: id }).then(listo);
+    function dejarPendiente() {
+      state.data.dispositivos = state.data.dispositivos.filter(function (d) { return String(d.id) !== String(id); });
+      guardarCache(state.data);
+      encolar({ tipo: 'borrar-equipo', borrarId: id });
+      toast(CP.MENSAJE_SIN_INTERNET);
+      render();
+    }
+    if (sinRed()) {
+      dejarPendiente();
+      return Promise.resolve();
+    }
+    return api('deleteDispositivo', { id: id }).then(listo).catch(function (err) {
+      if (!esFalloDeRed(err)) throw err;
+      dejarPendiente();
+    });
   }
 
   function guardarPago(entrada) {
@@ -1412,6 +1575,14 @@
         return Promise.reject(err);
       }
     }
+    function dejarPendiente() {
+      var local = CP.incorporarPago(state.data, entrada);
+      state.data = local.data;
+      guardarCache(state.data);
+      encolar({ tipo: 'pago', pago: entrada });
+      throw new Error(CP.MENSAJE_SIN_INTERNET);
+    }
+    if (sinRed()) return Promise.resolve().then(dejarPendiente);
     return api('registrarPago', { pago: entrada }).then(function (res) {
       var cliente = normalizarRemoto({ clientes: [res.cliente] }).clientes[0];
       var pago = normalizarRemoto({ pagos: [res.pago] }).pagos[0];
@@ -1419,6 +1590,9 @@
       state.data.pagos = upsert(state.data.pagos, pago);
       guardarCache(state.data);
       return { pago: pago, cliente: cliente };
+    }).catch(function (err) {
+      if (!esFalloDeRed(err)) throw err;
+      dejarPendiente();
     });
   }
 
@@ -1493,9 +1667,144 @@
   }
 
   function rechazoLectura() {
-    if (!state.soloLectura) return false;
-    toast('Sin conexión. No se puede guardar.');
+    if (!state.soloLectura || state.settings.url) return false;
+    toast(CP.MENSAJE_SIN_INTERNET);
     return true;
+  }
+
+  function sinRed(err) {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+    return !!(err && esFalloDeRed(err));
+  }
+
+  function leerCola() {
+    try {
+      var parsed = JSON.parse(lsGet(K_COLA) || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function guardarCola() {
+    lsSet(K_COLA, JSON.stringify(state.cola));
+  }
+
+  function encolar(op) {
+    state.cola = CP.encolarOperacion(state.cola, op);
+    guardarCola();
+    pintarAvisos();
+  }
+
+  function reintentarCola() {
+    if (!state.settings.url || state.modo === 'demo') return Promise.resolve();
+    if (sinRed()) {
+      toast(CP.MENSAJE_SIN_INTERNET);
+      return Promise.resolve();
+    }
+    function paso() {
+      if (!state.cola.length) {
+        guardarCola();
+        pintarAvisos();
+        toast('Pendientes guardados.');
+        return Promise.resolve();
+      }
+      var item = state.cola[0];
+      return enviarColaItem(item).then(function () {
+        state.cola = state.cola.slice(1);
+        guardarCola();
+        pintarAvisos();
+        return paso();
+      }).catch(function (err) {
+        guardarCola();
+        pintarAvisos();
+        toast(esFalloDeRed(err) || sinRed() ? CP.MENSAJE_SIN_INTERNET : mensaje(err));
+      });
+    }
+    return paso();
+  }
+
+  function enviarColaItem(item) {
+    if (!item) return Promise.resolve();
+    if (item.tipo === 'cliente') {
+      return api('upsertCliente', { cliente: item.cliente }).then(function (res) {
+        var guardado = normalizarRemoto({ clientes: [res.cliente] }).clientes[0];
+        state.data.clientes = upsert(state.data.clientes, guardado);
+        guardarCache(state.data);
+        if (item.cliente && CP.esArchivado(item.cliente) !== CP.esArchivado(guardado)) state.scriptViejo = true;
+      });
+    }
+    if (item.tipo === 'pago') {
+      return api('registrarPago', { pago: item.pago }).then(function (res) {
+        var cliente = normalizarRemoto({ clientes: [res.cliente] }).clientes[0];
+        var pago = normalizarRemoto({ pagos: [res.pago] }).pagos[0];
+        state.data.clientes = upsert(state.data.clientes, cliente);
+        state.data.pagos = upsert(state.data.pagos, pago);
+        guardarCache(state.data);
+      });
+    }
+    if (item.tipo === 'equipo') {
+      return api('upsertDispositivo', { dispositivo: item.dispositivo }).then(function (res) {
+        var guardado = normalizarRemoto({ dispositivos: [res.dispositivo] }).dispositivos[0];
+        state.data.dispositivos = upsert(state.data.dispositivos, guardado);
+        guardarCache(state.data);
+      });
+    }
+    if (item.tipo === 'borrar-equipo') return api('deleteDispositivo', { id: item.borrarId });
+    return Promise.resolve();
+  }
+
+  function leerRecordatorios(hoy) {
+    var fecha = CP.formatISO(CP.inicioDeDia(hoy || new Date()));
+    try {
+      var parsed = JSON.parse(lsGet(K_RECORDATORIOS) || '{}');
+      if (!parsed || parsed.fecha !== fecha) return {};
+      return parsed.ids || {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function marcarRecordatorio(id) {
+    var fecha = CP.formatISO(CP.inicioDeDia(new Date()));
+    var ids = leerRecordatorios(new Date());
+    ids[id] = true;
+    lsSet(K_RECORDATORIOS, JSON.stringify({ fecha: fecha, ids: ids }));
+  }
+
+  function copiarNumerosAviso() {
+    var texto = CP.numerosDifusion(CP.destinatariosAviso(state.data.clientes, state.areaAviso)).join('\n');
+    if (!texto) { toast('No hay números para copiar.'); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(texto).then(function () {
+        toast('Números copiados.');
+      }, function () { copiarConSeleccion(texto); });
+      return;
+    }
+    copiarConSeleccion(texto);
+  }
+
+  function copiarConSeleccion(texto) {
+    var area = document.createElement('textarea');
+    area.value = texto;
+    document.body.appendChild(area);
+    area.select();
+    try {
+      document.execCommand('copy');
+      toast('Números copiados.');
+    } catch (e) {
+      toast('No se pudieron copiar.');
+    }
+    document.body.removeChild(area);
+  }
+
+  function textoPlantilla(id) {
+    var lista = CP.PLANTILLAS_AVISO;
+    var i;
+    for (i = 0; i < lista.length; i++) {
+      if (lista[i].id === id) return lista[i].texto;
+    }
+    return '';
   }
 
   function sigueEnPago(clienteId) {

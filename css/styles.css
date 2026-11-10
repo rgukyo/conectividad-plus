@@ -377,6 +377,14 @@ textarea { min-height: 96px; resize: vertical; }
 
 .desglose.cobrado { border: 2px solid var(--blue); }
 
+a.nombre-ficha {
+  color: inherit;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
 .card, .desglose, .mensaje-box {
   background: var(--card);
   border-radius: 16px;

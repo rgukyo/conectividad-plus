@@ -5,7 +5,7 @@
   var K_SETTINGS = 'cp.settings.v1';
   var K_CACHE = 'cp.cache.v1';
   var K_DEMO = 'cp.demo.v1';
-  var VERSION = '6';
+  var VERSION = '7';
 
   var state = {
     settings: { url: '', clave: '', nombre: '' },
@@ -846,8 +846,18 @@
       return vacioTexto ? '<h2>' + esc(titulo) + '</h2><p class="vacio">' + esc(vacioTexto) + '</p>' : '';
     }
     return '<h2>' + esc(titulo) + '</h2><ul class="lista">' + clientes.map(function (c) {
-      return '<li>' + htmlClienteLink(c) + '</li>';
+      return '<li class="card">' + htmlFichaInicio(c) +
+        '<a class="btn primary block" href="#/clientes/' + seg(c.id) + '/pago">Registrar pago</a></li>';
     }).join('') + '</ul>';
+  }
+
+  function htmlFichaInicio(c) {
+    var estado = CP.estadoDeCliente(c, new Date());
+    var n = CP.equiposDeCliente(state.data.dispositivos, c.id).length;
+    return '<a class="nombre-ficha" href="#/clientes/' + seg(c.id) + '"><strong>' + esc(c.nombre) + '</strong></a>' +
+      '<p class="muted">' + esc(c.area || 'Sin área') + ' · ' + n + (n === 1 ? ' equipo' : ' equipos') +
+      (c.promo === 'SI' ? ' · Promo' : '') + '</p>' +
+      '<p>' + htmlChip(estado) + '</p>';
   }
 
   function htmlClienteLink(c) {

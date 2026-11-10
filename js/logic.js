@@ -204,10 +204,9 @@
   }
 
   function mensajeWhatsApp(nombre, monto, cubreHastaIso) {
-    return 'Hola ' + String(nombre || '').trim() +
-      ', ya recibimos tu pago de $' + formatPesos(monto) +
-      '. ¡Gracias! Tu servicio de Conectividad Plus queda cubierto hasta el ' +
-      fechaLarga(cubreHastaIso) + '.';
+    return '¡Hola ' + String(nombre || '').trim() +
+      '! 👋 Gracias por tu pago oportuno. Tu servicio de Conectividad Plus queda cubierto hasta el ' +
+      fechaLarga(cubreHastaIso) + ' ✅ ¡Que disfrutes tu conexión! 📶';
   }
 
   function enlaceWhatsApp(celular10, texto) {

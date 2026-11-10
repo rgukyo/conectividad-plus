@@ -237,7 +237,7 @@ test('el mensaje de WhatsApp usa el texto acordado', function () {
   var texto = CP.mensajeWhatsApp('Mariana Solís', 50, '2026-12-15');
   assert.strictEqual(
     texto,
-    'Hola Mariana Solís, ya recibimos tu pago de $50. ¡Gracias! Tu servicio de Conectividad Plus queda cubierto hasta el 15 de diciembre de 2026.'
+    '¡Hola Mariana Solís! 👋 Gracias por tu pago oportuno. Tu servicio de Conectividad Plus queda cubierto hasta el 15 de diciembre de 2026 ✅ ¡Que disfrutes tu conexión! 📶'
   );
   assert.strictEqual(
     CP.enlaceWhatsApp('55 0000 0001', texto),

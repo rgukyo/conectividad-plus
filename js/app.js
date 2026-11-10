@@ -5,7 +5,7 @@
   var K_SETTINGS = 'cp.settings.v1';
   var K_CACHE = 'cp.cache.v1';
   var K_DEMO = 'cp.demo.v1';
-  var VERSION = '7';
+  var VERSION = '8';
 
   var state = {
     settings: { url: '', clave: '', nombre: '' },

@@ -7,7 +7,7 @@
   var K_DEMO = 'cp.demo.v1';
   var K_COLA = 'cp.cola.v1';
   var K_RECORDATORIOS = 'cp.recordatorios.v1';
-  var VERSION = '9';
+  var VERSION = '10';
 
   var state = {
     settings: { url: '', clave: '', nombre: '' },
@@ -36,7 +36,9 @@
     plantillaAviso: 'mantenimiento',
     textoAviso: '',
     areaAviso: '',
-    avisosHechos: {}
+    avisosHechos: {},
+    usuario: { nombre: 'Roger García', rol: 'admin' },
+    usuarios: []
   };
 
   var ultimaRuta = null;
@@ -189,14 +191,24 @@
     try {
       var parsed = JSON.parse(lsGet(K_CACHE) || 'null');
       if (!parsed || !parsed.data) return null;
-      return { data: normalizarRemoto(parsed.data), cuando: String(parsed.cuando || '') };
+      return {
+        data: normalizarRemoto(parsed.data, parsed.usuario && parsed.usuario.rol),
+        cuando: String(parsed.cuando || ''),
+        usuario: parsed.usuario || null,
+        usuarios: parsed.usuarios || []
+      };
     } catch (e) {
       return null;
     }
   }
 
   function guardarCache(data) {
-    lsSet(K_CACHE, JSON.stringify({ cuando: new Date().toISOString(), data: data }));
+    lsSet(K_CACHE, JSON.stringify({
+      cuando: new Date().toISOString(),
+      data: data,
+      usuario: state.usuario,
+      usuarios: state.usuarios
+    }));
   }
 
   function leerDemo() {
@@ -211,7 +223,7 @@
     if (!lsSet(K_DEMO, JSON.stringify(state.data))) toast('No se pudo guardar en este teléfono.');
   }
 
-  function normalizarRemoto(data) {
+  function normalizarRemoto(data, rol) {
     data = data || {};
     function fecha(value) {
       if (!value) return '';
@@ -254,7 +266,11 @@
           id: String(p.id || '').trim(),
           cliente_id: String(p.cliente_id || '').trim(),
           fecha: fecha(p.fecha),
-          monto: Number(p.monto) || 0,
+          monto: (function () {
+            if (rol === 'operador' || p.monto === '' || p.monto == null) return null;
+            var n = Number(p.monto);
+            return isFinite(n) ? n : null;
+          })(),
           meses: Number(p.meses) || 0,
           cubre_hasta: fecha(p.cubre_hasta),
           registrado_por: String(p.registrado_por || '').trim()
@@ -327,6 +343,8 @@
       state.soloLectura = false;
       state.aviso = '';
       state.scriptViejo = false;
+      state.usuario = { nombre: CP.NOMBRE_ADMIN, rol: 'admin' };
+      state.usuarios = [];
       state.data = leerDemo();
       state.cargando = false;
       render();
@@ -334,7 +352,8 @@
     }
     return api('list').then(function (data) {
       state.scriptViejo = !CP.respuestaTraeArchivado(data);
-      state.data = normalizarRemoto(data);
+      aplicarUsuario(data);
+      state.data = normalizarRemoto(data, state.usuario.rol);
       state.modo = 'online';
       state.soloLectura = false;
       state.aviso = '';
@@ -343,6 +362,8 @@
       var cache = leerCache();
       if (esFalloDeRed(err) && cache) {
         state.data = cache.data;
+        if (cache.usuario && cache.usuario.rol) state.usuario = cache.usuario;
+        state.usuarios = cache.usuarios || [];
         state.modo = 'offline';
         state.soloLectura = true;
         state.cacheEn = cache.cuando;
@@ -523,8 +544,9 @@
       '<h1>Hoy</h1>' +
       htmlResumen(true) +
       '<p><a class="btn primary block" href="#/clientes/nuevo">Nuevo cliente</a></p>' +
-      '<p><a class="btn ghost block" href="#/cobros">Consultar cobros</a></p>' +
+      (esAdmin() ? '<p><a class="btn ghost block" href="#/cobros">Consultar cobros</a></p>' : '') +
       '<p><a class="btn ghost block" href="#/avisos">Avisos</a></p>' +
+      htmlJornada(hoy) +
       (state.settings.url ? '<p><button type="button" class="btn ghost block" data-action="actualizar">Actualizar</button></p>' : '') +
       htmlRecordatorios(hoy) +
       htmlGrupo('Vencidos', ordenarPorNombre(vencidos), 'Nadie está vencido.') +
@@ -606,7 +628,7 @@
         '</select></label>' +
         '<div class="fila-botones">' +
         '<a class="btn ghost" href="#/equipos/' + seg(eq.id) + '">Editar</a>' +
-        '<button type="button" class="btn danger" data-action="borrar-equipo" data-id="' + esc(eq.id) + '">Eliminar</button>' +
+        (esAdmin() ? '<button type="button" class="btn danger" data-action="borrar-equipo" data-id="' + esc(eq.id) + '">Eliminar</button>' : '') +
         '</div></article>';
     }).join('');
   }
@@ -627,10 +649,10 @@
       htmlLeyendaReactivacion(cliente) +
       '<a class="btn primary block" href="#/clientes/' + seg(cliente.id) + '/pago">Registrar pago</a>' +
       '<a class="btn ghost block" href="#/clientes/' + seg(cliente.id) + '/editar">Editar cliente</a>' +
-      (CP.esArchivado(cliente)
+      (esAdmin() ? (CP.esArchivado(cliente)
         ? '<button type="button" class="btn primary block" data-action="reactivar-cliente" data-id="' + esc(cliente.id) + '">Reactivar</button>'
         : '<p class="ayuda">Archivar lo quita de la lista activa y del pendiente. No borra su registro.</p>' +
-          '<button type="button" class="btn ghost block" data-action="archivar-cliente" data-id="' + esc(cliente.id) + '">Archivar cliente</button>') +
+          '<button type="button" class="btn ghost block" data-action="archivar-cliente" data-id="' + esc(cliente.id) + '">Archivar cliente</button>') : '') +
       (cliente.notas ? '<p class="notas">' + esc(cliente.notas) + '</p>' : '') +
       '<h2>Equipos</h2>' +
       (equipos.length ? equipos.map(function (eq) {
@@ -772,10 +794,57 @@
       '<button class="btn ghost block" type="button" data-action="modo-demo">Quitar conexión (demostración)</button>' +
       '<button class="btn ghost block" type="button" data-action="reset-demo">Restablecer datos de demostración</button>' +
       '</form>' +
+      htmlUsuarios() +
       '<h2>En el teléfono</h2>' +
       '<p><a class="btn ghost block" href="#/avisos">Avisos</a></p>' +
       '<p class="ayuda">Chrome → menú → Instalar aplicación, o Agregar a pantalla principal. Sin señal se abre la última copia, solo para consultar.</p>' +
       (state.cacheEn ? '<p class="ayuda">Última copia en línea: ' + esc(state.cacheEn) + '</p>' : '');
+  }
+
+  function esAdmin() {
+    return !state.usuario || state.usuario.rol !== 'operador';
+  }
+
+  function aplicarUsuario(data) {
+    var u = data && data.usuario;
+    if (!u || (u.rol !== 'admin' && u.rol !== 'operador')) {
+      state.usuario = { nombre: CP.NOMBRE_ADMIN, rol: 'admin' };
+    } else {
+      state.usuario = { nombre: String(u.nombre || CP.NOMBRE_ADMIN), rol: u.rol };
+    }
+    state.usuarios = (data && data.usuarios) || [];
+  }
+
+  function htmlJornada(hoy) {
+    if (!esAdmin()) return '';
+    var grupos = CP.jornadaAjena(state.data.pagos, state.data.clientes, hoy, state.usuario && state.usuario.nombre);
+    if (!grupos.length) return '';
+    return grupos.map(function (g) {
+      return '<section class="card"><p><strong>Hoy ' + esc(g.nombre) + ' registró ' + g.n +
+        (g.n === 1 ? ' pago' : ' pagos') + '</strong></p><p class="muted">' +
+        esc(g.clientes.join(', ')) + '</p></section>';
+    }).join('');
+  }
+
+  function htmlUsuarios() {
+    if (!esAdmin() || state.modo === 'demo') return '';
+    var filas = (state.usuarios || []).map(function (u) {
+      return '<li class="item"><span class="item-main"><strong>' + esc(u.nombre) + '</strong><span class="muted">' +
+        esc(u.rol || 'operador') + '</span></span><button type="button" class="btn ghost" data-action="quitar-usuario" data-nombre="' +
+        esc(u.nombre) + '">Quitar</button></li>';
+    }).join('');
+    return '<h2>Usuarios</h2>' +
+      '<p class="ayuda">La clave se guarda cifrada. Aquí no se vuelve a mostrar.</p>' +
+      '<form id="form-usuario">' +
+      '<label class="campo">Nombre<input name="nombre" maxlength="120" placeholder="Jorge Daniel Colli Cocom" required></label>' +
+      '<p class="ayuda">Rol: operador</p>' +
+      '<input type="hidden" name="rol" value="operador">' +
+      '<div class="campo"><span>Clave</span><div class="clave-fila">' +
+      '<input name="clave" type="password" autocomplete="off" minlength="8">' +
+      '<button type="button" class="btn ghost" data-action="ver-clave-usuario">Ver</button></div></div>' +
+      '<button class="btn primary block" type="submit">Guardar usuario</button>' +
+      '</form>' +
+      (filas ? '<ul class="lista">' + filas + '</ul>' : '<p class="vacio">Todavía no hay otros usuarios.</p>');
   }
 
   function htmlRecordatorios(hoy) {
@@ -839,6 +908,11 @@
   }
 
   function htmlCobros() {
+    if (!esAdmin()) {
+      return htmlVolver('#/', 'Inicio') +
+        '<h1>Cobros</h1>' +
+        '<p class="ayuda">El total cobrado solo lo ve quien administra.</p>';
+    }
     var info = CP.informeCobros(state.data, state.periodoCobro, new Date());
     var opciones = info.periodos.map(function (clave) {
       return '<option value="' + esc(clave) + '"' + (clave === info.clave ? ' selected' : '') + '>' +
@@ -1000,7 +1074,8 @@
       '<p class="mac num">' + esc(eq.mac) + '</p>' +
       htmlNotaEquipo(eq) +
       '<div class="fila-botones"><a class="btn ghost" href="' + href + '">Editar</a>' +
-      '<button type="button" class="btn danger" data-action="borrar-equipo" data-id="' + esc(eq.id) + '">Borrar</button></div></article>';
+      (esAdmin() ? '<button type="button" class="btn danger" data-action="borrar-equipo" data-id="' + esc(eq.id) + '">Borrar</button>' : '') +
+      '</div></article>';
   }
 
   function htmlHistorial(clienteId) {
@@ -1008,7 +1083,8 @@
     if (!pagos.length) return '<p class="vacio">Todavía no hay pagos.</p>';
     return '<ul class="lista">' + pagos.map(function (p) {
       var meses = Number(p.meses) || 0;
-      return '<li class="item"><span class="item-main"><strong class="num">' + esc(dinero(p.monto)) + '</strong>' +
+      return '<li class="item"><span class="item-main">' +
+        (p.monto == null ? '' : '<strong class="num">' + esc(dinero(p.monto)) + '</strong>') +
         '<span class="muted">' + esc(CP.fechaCorta(p.fecha) || p.fecha) + ' · ' + meses + (meses === 1 ? ' mes' : ' meses') +
         (p.registrado_por ? ' · ' + esc(p.registrado_por) : '') + '</span></span>' +
         '<span class="item-side"><span class="muted">Hasta</span><strong>' + esc(CP.fechaCorta(p.cubre_hasta) || '—') + '</strong></span></li>';
@@ -1093,9 +1169,10 @@
       render();
       return;
     }
-    if (action === 'ver-clave') {
+    if (action === 'ver-clave' || action === 'ver-clave-usuario') {
       e.preventDefault();
-      var input = document.querySelector('#form-ajustes [name="clave"]');
+      var selector = action === 'ver-clave-usuario' ? '#form-usuario [name="clave"]' : '#form-ajustes [name="clave"]';
+      var input = document.querySelector(selector);
       if (!input) return;
       input.type = input.type === 'password' ? 'text' : 'password';
       btn.textContent = input.type === 'password' ? 'Ver' : 'Ocultar';
@@ -1150,6 +1227,11 @@
       copiarNumerosAviso();
       return;
     }
+    if (action === 'quitar-usuario') {
+      e.preventDefault();
+      quitarUsuario(btn.getAttribute('data-nombre'));
+      return;
+    }
     if (action === 'aplicar-version') {
       e.preventDefault();
       aplicarActualizacion();
@@ -1163,7 +1245,7 @@
   function onSubmit(e) {
     var form = e.target;
     var id = idFormulario(form);
-    if (id !== 'form-cliente' && id !== 'form-equipo' && id !== 'form-pago' && id !== 'form-ajustes') return;
+    if (id !== 'form-cliente' && id !== 'form-equipo' && id !== 'form-pago' && id !== 'form-ajustes' && id !== 'form-usuario') return;
     e.preventDefault();
     if (id === 'form-cliente') guardarClienteDesde(form);
     else if (id === 'form-equipo') guardarEquipoDesde(form, false);
@@ -1175,7 +1257,7 @@
         if (state.modo === 'online') toast('Conectado.');
         else if (state.modo === 'demo') toast('Modo demostración.');
       });
-    }
+    } else if (id === 'form-usuario') guardarUsuarioDesde(form);
   }
 
   function onInput(e) {
@@ -1585,7 +1667,7 @@
     if (sinRed()) return Promise.resolve().then(dejarPendiente);
     return api('registrarPago', { pago: entrada }).then(function (res) {
       var cliente = normalizarRemoto({ clientes: [res.cliente] }).clientes[0];
-      var pago = normalizarRemoto({ pagos: [res.pago] }).pagos[0];
+      var pago = normalizarRemoto({ pagos: [res.pago] }, state.usuario && state.usuario.rol).pagos[0];
       state.data.clientes = upsert(state.data.clientes, cliente);
       state.data.pagos = upsert(state.data.pagos, pago);
       guardarCache(state.data);
@@ -1737,7 +1819,7 @@
     if (item.tipo === 'pago') {
       return api('registrarPago', { pago: item.pago }).then(function (res) {
         var cliente = normalizarRemoto({ clientes: [res.cliente] }).clientes[0];
-        var pago = normalizarRemoto({ pagos: [res.pago] }).pagos[0];
+        var pago = normalizarRemoto({ pagos: [res.pago] }, state.usuario && state.usuario.rol).pagos[0];
         state.data.clientes = upsert(state.data.clientes, cliente);
         state.data.pagos = upsert(state.data.pagos, pago);
         guardarCache(state.data);
@@ -1770,6 +1852,30 @@
     var ids = leerRecordatorios(new Date());
     ids[id] = true;
     lsSet(K_RECORDATORIOS, JSON.stringify({ fecha: fecha, ids: ids }));
+  }
+
+  function guardarUsuarioDesde(form) {
+    if (!esAdmin()) return;
+    if (state.modo !== 'online') { toast('Conecta la hoja para guardar usuarios.'); return; }
+    if (sinRed()) { toast(CP.MENSAJE_SIN_INTERNET); return; }
+    var nombre = val(form, 'nombre').trim();
+    var clave = val(form, 'clave');
+    api('setUsuario', { nombre: nombre, rol: 'operador', clave: clave }).then(function (data) {
+      state.usuarios = (data && data.usuarios) || [];
+      form.reset();
+      toast('Usuario guardado.');
+      render();
+    }).catch(function (err) { toast(mensaje(err)); });
+  }
+
+  function quitarUsuario(nombre) {
+    if (!esAdmin() || state.modo !== 'online') return;
+    if (sinRed()) { toast(CP.MENSAJE_SIN_INTERNET); return; }
+    api('quitarUsuario', { nombre: nombre }).then(function (data) {
+      state.usuarios = (data && data.usuarios) || [];
+      toast('Usuario quitado.');
+      render();
+    }).catch(function (err) { toast(mensaje(err)); });
   }
 
   function copiarNumerosAviso() {

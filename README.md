@@ -83,6 +83,10 @@ Si la hoja no devuelve la marca, la app no dice que se archivó.
 
 `instalarRespaldoSemanal` en `apps-script/Code.gs` crea un disparador de los lunes. La copia queda en la carpeta `Conectividad Plus - Respaldos` y se conservan las últimas 8. Hay que ejecutarlo una vez en el editor, sobre la implementación que ya termina en `kFRA/exec` (nombre «Sin título»), publicando una versión nueva sin cambiar esa URL. Google pedirá permiso de Drive y de disparadores. No cambia `CLAVE` ni `SHEET_ID`.
 
+## Segundo usuario
+
+`CLAVE` sigue siendo la de Roger (admin, «Roger García»). Otros usuarios viven en la propiedad `USUARIOS`, solo con el hash de su clave. Roger los crea en Ajustes → Usuarios. Un operador puede cobrar y editar, y no puede archivar, reactivar, borrar equipos ni ver el total cobrado.
+
 ## Importar lo que ya tienen anotado
 
 Está en `tools/import_template.md`. Se pega en la hoja. No guardes ese pegado en git.

@@ -703,6 +703,7 @@
   }
 
   var MENSAJE_SIN_INTERNET = 'No se guardó: sin internet';
+  var NOMBRE_ADMIN = 'Roger García';
   var MAX_RESPALDOS = 8;
   var PLANTILLAS_AVISO = [
     {
@@ -802,6 +803,33 @@
     return salida;
   }
 
+  function jornadaAjena(pagos, clientes, now, nombreAdmin) {
+    var hoy = formatISO(inicioDeDia(now || new Date()));
+    var admin = String(nombreAdmin || NOMBRE_ADMIN).trim();
+    var grupos = {};
+    var orden = [];
+    (pagos || []).forEach(function (pago) {
+      if (String(pago && pago.fecha || '').slice(0, 10) !== hoy) return;
+      var quien = String(pago.registrado_por || '').trim();
+      if (!quien || quien === admin) return;
+      if (!grupos[quien]) {
+        grupos[quien] = { nombre: quien, n: 0, clientes: [] };
+        orden.push(quien);
+      }
+      grupos[quien].n += 1;
+      var nombre = 'Sin nombre';
+      var i;
+      for (i = 0; i < (clientes || []).length; i++) {
+        if (String(clientes[i].id) === String(pago.cliente_id)) {
+          nombre = String(clientes[i].nombre || '').trim() || 'Sin nombre';
+          break;
+        }
+      }
+      if (grupos[quien].clientes.indexOf(nombre) < 0) grupos[quien].clientes.push(nombre);
+    });
+    return orden.map(function (quien) { return grupos[quien]; }).filter(function (g) { return g.n > 0; });
+  }
+
   function conteoAvisos(clientes, hechos) {
     var total = (clientes || []).length;
     var n = 0;
@@ -839,6 +867,8 @@
     mensajeWhatsApp: mensajeWhatsApp,
     enlaceWhatsApp: enlaceWhatsApp,
     MENSAJE_SIN_INTERNET: MENSAJE_SIN_INTERNET,
+    NOMBRE_ADMIN: NOMBRE_ADMIN,
+    jornadaAjena: jornadaAjena,
     MAX_RESPALDOS: MAX_RESPALDOS,
     PLANTILLAS_AVISO: PLANTILLAS_AVISO,
     recordatoriosHoy: recordatoriosHoy,

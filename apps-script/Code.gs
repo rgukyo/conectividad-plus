@@ -81,14 +81,18 @@ function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
+var NOMBRE_ADMIN_ = 'Roger García';
+
 function despachar_(req) {
-  exigirClave_(req);
+  var usuario = exigirClave_(req);
   var action = String(req.action || 'list').trim();
-  if (action === 'list') return listar_();
-  if (action === 'upsertCliente') return conCandado_(function () { return upsertCliente_(req); });
+  if (action === 'list') return listar_(usuario);
+  if (action === 'upsertCliente') return conCandado_(function () { return upsertCliente_(req, usuario); });
   if (action === 'upsertDispositivo') return conCandado_(function () { return upsertDispositivo_(req); });
-  if (action === 'deleteDispositivo') return conCandado_(function () { return borrarDispositivo_(req); });
-  if (action === 'registrarPago') return conCandado_(function () { return registrarPago_(req); });
+  if (action === 'deleteDispositivo') return conCandado_(function () { return borrarDispositivo_(req, usuario); });
+  if (action === 'registrarPago') return conCandado_(function () { return registrarPago_(req, usuario); });
+  if (action === 'setUsuario') return conCandado_(function () { return setUsuario_(req, usuario); });
+  if (action === 'quitarUsuario') return conCandado_(function () { return quitarUsuario_(req, usuario); });
   throw new Error('Acción desconocida.');
 }
 
@@ -97,8 +101,170 @@ function exigirClave_(req) {
   if (!esperada) {
     throw new Error('Falta la propiedad CLAVE. En Apps Script: Configuración del proyecto, Propiedades del script.');
   }
-  var recibida = req && req.clave != null ? String(req.clave) : '';
-  if (!mismaClave_(recibida, String(esperada))) throw new Error('Clave incorrecta');
+  return usuarioDe_(req && req.clave);
+}
+
+function usuarioDe_(clave) {
+  var esperada = PropertiesService.getScriptProperties().getProperty('CLAVE');
+  if (!esperada) {
+    throw new Error('Falta la propiedad CLAVE. En Apps Script: Configuración del proyecto, Propiedades del script.');
+  }
+  var recibida = clave == null ? '' : String(clave);
+  if (mismaClave_(recibida, String(esperada))) {
+    return { nombre: NOMBRE_ADMIN_, rol: 'admin' };
+  }
+  var lista = leerUsuarios_();
+  var hash = sha256Hex_(recibida);
+  var i;
+  for (i = 0; i < lista.length; i++) {
+    var item = lista[i] || {};
+    if (item.hash && mismaClave_(hash, String(item.hash))) {
+      var rol = String(item.rol || '').trim().toLowerCase() === 'admin' ? 'admin' : 'operador';
+      return { nombre: String(item.nombre || '').trim(), rol: rol };
+    }
+  }
+  throw new Error('Clave incorrecta');
+}
+
+function esAdmin_(usuario) {
+  return !!(usuario && usuario.rol === 'admin');
+}
+
+function exigirAdmin_(usuario) {
+  if (!esAdmin_(usuario)) throw new Error('No tienes permiso para esto.');
+}
+
+function sha256Hex_(texto) {
+  var raw = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(texto), Utilities.Charset.UTF_8);
+  var hex = '';
+  var i;
+  for (i = 0; i < raw.length; i++) {
+    var v = raw[i];
+    if (v < 0) v += 256;
+    var h = v.toString(16);
+    if (h.length < 2) h = '0' + h;
+    hex += h;
+  }
+  return hex;
+}
+
+function leerUsuarios_() {
+  var crudo = PropertiesService.getScriptProperties().getProperty('USUARIOS');
+  if (!crudo) return [];
+  try {
+    var lista = JSON.parse(String(crudo));
+    return Array.isArray(lista) ? lista : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function usuariosPublicos_(lista) {
+  return (lista || []).map(function (item) {
+    return { nombre: String(item.nombre || '').trim(), rol: String(item.rol || 'operador') };
+  }).filter(function (item) { return item.nombre; });
+}
+
+function guardarUsuarios_(lista) {
+  PropertiesService.getScriptProperties().setProperty('USUARIOS', JSON.stringify(lista || []));
+}
+
+function setUsuario_(req, usuario) {
+  exigirAdmin_(usuario);
+  var nombre = String(req.nombre || '').trim();
+  var rol = String(req.rol || 'operador').trim().toLowerCase();
+  var clave = req.clave == null ? '' : String(req.clave);
+  if (!nombre) throw new Error('Escribe el nombre.');
+  if (nombre.length > 120) throw new Error('El nombre es demasiado largo.');
+  if (rol !== 'operador' && rol !== 'admin') throw new Error('Rol no válido.');
+  if (clave.length < 8) throw new Error('La clave debe tener al menos 8 caracteres.');
+  var lista = leerUsuarios_();
+  var hash = sha256Hex_(clave);
+  var nuevo = { nombre: nombre, rol: rol, hash: hash };
+  var encontrado = false;
+  var i;
+  for (i = 0; i < lista.length; i++) {
+    if (String(lista[i].nombre || '').trim() === nombre) {
+      lista[i] = nuevo;
+      encontrado = true;
+      break;
+    }
+  }
+  if (!encontrado) lista.push(nuevo);
+  guardarUsuarios_(lista);
+  return { usuarios: usuariosPublicos_(lista) };
+}
+
+function quitarUsuario_(req, usuario) {
+  exigirAdmin_(usuario);
+  var nombre = String(req.nombre || '').trim();
+  if (!nombre) throw new Error('Escribe el nombre.');
+  var lista = leerUsuarios_().filter(function (item) {
+    return String(item.nombre || '').trim() !== nombre;
+  });
+  guardarUsuarios_(lista);
+  return { usuarios: usuariosPublicos_(lista) };
+}
+
+function autorPago_(entrada, usuario) {
+  return String(usuario && usuario.nombre || '').trim().slice(0, 80);
+}
+
+function vigilarCamposOperador_(nuevo, actual) {
+  if (viene_(nuevo, 'archivado')) {
+    var antesA = actual && esPromo_(actual.archivado) ? 'SI' : 'NO';
+    var despuesA = esPromo_(nuevo.archivado) ? 'SI' : 'NO';
+    if (antesA !== despuesA) throw new Error('No tienes permiso para archivar o reactivar.');
+  }
+  if (viene_(nuevo, 'exento')) {
+    var antesE = actual && esPromo_(actual.exento) ? 'SI' : 'NO';
+    var despuesE = esPromo_(nuevo.exento) ? 'SI' : 'NO';
+    if (antesE !== despuesE) throw new Error('No tienes permiso para cambiar el exento.');
+  }
+  if (viene_(nuevo, 'reactivacion')) {
+    var antesR = 0;
+    if (actual && actual.reactivacion !== '' && actual.reactivacion != null && isFinite(Number(actual.reactivacion))) {
+      antesR = Math.round(Number(actual.reactivacion) * 100);
+    }
+    var despuesR = Math.round((Number(nuevo.reactivacion) || 0) * 100);
+    if (antesR !== despuesR) throw new Error('No tienes permiso para cambiar la reactivación.');
+  }
+}
+
+function listaParaRol_(data, usuario) {
+  var base = data || {};
+  var salida = {
+    clientes: base.clientes || [],
+    dispositivos: base.dispositivos || [],
+    pagos: base.pagos || [],
+    usuario: { nombre: usuario.nombre, rol: usuario.rol }
+  };
+  if (esAdmin_(usuario)) {
+    salida.usuarios = usuariosPublicos_(leerUsuarios_());
+    return salida;
+  }
+  salida.pagos = (salida.pagos || []).map(function (pago) {
+    var copia = {};
+    var campo;
+    for (campo in pago) {
+      if (Object.prototype.hasOwnProperty.call(pago, campo) && campo !== 'monto' && campo !== 'mensualidad') {
+        copia[campo] = pago[campo];
+      }
+    }
+    copia.monto = '';
+    return copia;
+  });
+  salida.clientes = (salida.clientes || []).map(function (cliente) {
+    var copia = {};
+    var campo;
+    for (campo in cliente) {
+      if (!Object.prototype.hasOwnProperty.call(cliente, campo)) continue;
+      if (campo === 'mensualidad') continue;
+      copia[campo] = cliente[campo];
+    }
+    return copia;
+  });
+  return salida;
 }
 
 function mismaClave_(a, b) {
@@ -135,7 +301,7 @@ function zona_() {
   return libro_().getSpreadsheetTimeZone() || Session.getScriptTimeZone() || 'America/Mexico_City';
 }
 
-function listar_() {
+function listar_(usuario) {
   var ss = libro_();
   if (faltanHojas_(ss) || idsVacios_(ss)) {
     conCandado_(function () {
@@ -145,11 +311,11 @@ function listar_() {
       asignarIdsFaltantes_(ss.getSheetByName('Pagos'), 'p');
     });
   }
-  return {
+  return listaParaRol_({
     clientes: leerObjetos_(ss.getSheetByName('Clientes'), HEADERS_CLIENTES),
     dispositivos: leerObjetos_(ss.getSheetByName('Dispositivos'), HEADERS_DISPOSITIVOS),
     pagos: leerObjetos_(ss.getSheetByName('Pagos'), HEADERS_PAGOS)
-  };
+  }, usuario);
 }
 
 function faltanHojas_(ss) {
@@ -163,12 +329,16 @@ function idsVacios_(ss) {
     faltanIds_(ss.getSheetByName('Pagos'));
 }
 
-function upsertCliente_(req) {
+function upsertCliente_(req, usuario) {
   var ss = libro_();
   asegurarTodas_(ss);
   var cliente = normalizarCliente_(objetoDe_(req, 'cliente'));
   if (!cliente.id) cliente.id = nuevoId_('c');
-  return { cliente: guardarObjeto_(ss.getSheetByName('Clientes'), HEADERS_CLIENTES, cliente) };
+  var sh = ss.getSheetByName('Clientes');
+  var row = indiceFila_(sh, cliente.id);
+  var actual = row >= 0 ? leerFila_(sh, HEADERS_CLIENTES, row) : null;
+  if (!esAdmin_(usuario)) vigilarCamposOperador_(cliente, actual);
+  return { cliente: guardarObjeto_(sh, HEADERS_CLIENTES, cliente) };
 }
 
 function upsertDispositivo_(req) {
@@ -186,7 +356,8 @@ function upsertDispositivo_(req) {
   return respuesta;
 }
 
-function borrarDispositivo_(req) {
+function borrarDispositivo_(req, usuario) {
+  exigirAdmin_(usuario);
   var anidado = req && req.dispositivo;
   var id = String((req && (req.id || (anidado && anidado.id))) || '').trim();
   if (!id) throw new Error('Falta el id del equipo.');
@@ -199,7 +370,7 @@ function borrarDispositivo_(req) {
   return { id: id };
 }
 
-function registrarPago_(req) {
+function registrarPago_(req, usuario) {
   var ss = libro_();
   asegurarTodas_(ss);
   var entrada = objetoDe_(req, 'pago');
@@ -239,7 +410,7 @@ function registrarPago_(req) {
     monto: monto,
     meses: meses,
     cubre_hasta: cubre,
-    registrado_por: String(entrada.registrado_por || '').trim().slice(0, 80)
+    registrado_por: autorPago_(entrada, usuario)
   };
   guardarObjeto_(shPagos, HEADERS_PAGOS, pago);
   cliente.fecha_ultimo_pago = pago.fecha;

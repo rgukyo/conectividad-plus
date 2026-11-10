@@ -702,6 +702,116 @@
     return 'Vence en ' + estado.dias + ' días';
   }
 
+  var MENSAJE_SIN_INTERNET = 'No se guardó: sin internet';
+  var MAX_RESPALDOS = 8;
+  var PLANTILLAS_AVISO = [
+    {
+      id: 'mantenimiento',
+      nombre: 'Mantenimiento programado',
+      texto: '¡Hola {nombre}! 👋 Te avisamos que habrá un mantenimiento programado en Conectividad Plus 📶 Gracias por tu comprensión ✅'
+    },
+    {
+      id: 'falla',
+      nombre: 'Falla del proveedor',
+      texto: '¡Hola {nombre}! 👋 Te avisamos que hay una falla del proveedor y el servicio puede fallar 📶 Estamos al pendiente ✅'
+    },
+    {
+      id: 'restablecido',
+      nombre: 'Servicio restablecido',
+      texto: '¡Hola {nombre}! 👋 El servicio de Conectividad Plus ya está restablecido 📶 Gracias por tu preferencia ✅'
+    },
+    { id: 'libre', nombre: 'Texto libre', texto: '' }
+  ];
+
+  function recordatoriosHoy(clientes, now) {
+    var hoy = inicioDeDia(now || new Date());
+    if (hoy.getDate() !== DIA_CORTE) return [];
+    var lista = [];
+    (clientes || []).forEach(function (cliente) {
+      if (!cliente || esArchivado(cliente) || esExento(cliente)) return;
+      var vencimiento = parseFecha(cliente.proximo_vencimiento);
+      if (!vencimiento) {
+        lista.push(cliente);
+        return;
+      }
+      var venceHoy = vencimiento.getFullYear() === hoy.getFullYear() &&
+        vencimiento.getMonth() === hoy.getMonth() &&
+        vencimiento.getDate() === hoy.getDate();
+      if (venceHoy || vencimiento.getTime() < hoy.getTime()) lista.push(cliente);
+    });
+    return lista;
+  }
+
+  function mensajeRecordatorio(nombre) {
+    return '¡Hola ' + String(nombre || '').trim() +
+      '! 👋 Te recordamos que hoy vence tu servicio de Conectividad Plus 📶 Gracias por tu preferencia ✅';
+  }
+
+  function quedarseConRecientes(items, maximo) {
+    var n = parseInt(maximo, 10);
+    if (!n || n < 1) n = MAX_RESPALDOS;
+    var lista = (items || []).slice().sort(function (a, b) {
+      return Number(b && b.fecha) - Number(a && a.fecha);
+    });
+    return lista.slice(0, n);
+  }
+
+  function encolarOperacion(cola, operacion) {
+    var lista = (cola || []).slice();
+    var op = operacion || {};
+    if (op.tipo === 'pago' && op.pago && op.pago.id) {
+      lista = lista.filter(function (item) {
+        return !(item && item.tipo === 'pago' && item.pago && String(item.pago.id) === String(op.pago.id));
+      });
+    }
+    lista.push(op);
+    return lista;
+  }
+
+  function incorporarPago(data, entrada) {
+    var id = String(entrada && entrada.id || '');
+    var existe = id && (data && data.pagos || []).some(function (pago) {
+      return String(pago.id) === id;
+    });
+    if (existe) return { data: data, duplicado: true };
+    var res = aplicarPago(data, entrada);
+    res.duplicado = false;
+    return res;
+  }
+
+  function destinatariosAviso(clientes, area) {
+    var zona = String(area || '').trim();
+    return (clientes || []).filter(function (cliente) {
+      if (!cliente || esArchivado(cliente)) return false;
+      if (zona && String(cliente.area || '') !== zona) return false;
+      return true;
+    });
+  }
+
+  function mensajeAviso(plantilla, nombre) {
+    return String(plantilla || '').split('{nombre}').join(String(nombre || '').trim());
+  }
+
+  function numerosDifusion(clientes) {
+    var salida = [];
+    (clientes || []).forEach(function (cliente) {
+      if (!cliente || esArchivado(cliente)) return;
+      var cel = normalizarCelular(cliente.celular);
+      if (cel.ok) salida.push('+52' + cel.digitos);
+    });
+    return salida;
+  }
+
+  function conteoAvisos(clientes, hechos) {
+    var total = (clientes || []).length;
+    var n = 0;
+    var marca = hechos || {};
+    (clientes || []).forEach(function (cliente) {
+      if (marca[cliente.id]) n += 1;
+    });
+    return { hechos: n, total: total, texto: n + ' de ' + total };
+  }
+
   return {
     PRECIO_EQUIPO: PRECIO_EQUIPO,
     DESCUENTO_PAR: DESCUENTO_PAR,
@@ -728,6 +838,18 @@
     formatPesos: formatPesos,
     mensajeWhatsApp: mensajeWhatsApp,
     enlaceWhatsApp: enlaceWhatsApp,
+    MENSAJE_SIN_INTERNET: MENSAJE_SIN_INTERNET,
+    MAX_RESPALDOS: MAX_RESPALDOS,
+    PLANTILLAS_AVISO: PLANTILLAS_AVISO,
+    recordatoriosHoy: recordatoriosHoy,
+    mensajeRecordatorio: mensajeRecordatorio,
+    quedarseConRecientes: quedarseConRecientes,
+    encolarOperacion: encolarOperacion,
+    incorporarPago: incorporarPago,
+    destinatariosAviso: destinatariosAviso,
+    mensajeAviso: mensajeAviso,
+    numerosDifusion: numerosDifusion,
+    conteoAvisos: conteoAvisos,
     equiposDeCliente: equiposDeCliente,
     mensualidadCliente: mensualidadCliente,
     cargoReactivacion: cargoReactivacion,

@@ -657,6 +657,49 @@ function asignarIdsFaltantes_(sh, prefijo) {
   }
 }
 
+var CARPETA_RESPALDOS_ = 'Conectividad Plus - Respaldos';
+var MAX_RESPALDOS_ = 8;
+
+function instalarRespaldoSemanal() {
+  var existentes = ScriptApp.getProjectTriggers();
+  var i;
+  for (i = 0; i < existentes.length; i++) {
+    if (existentes[i].getHandlerFunction() === 'respaldoSemanal') return;
+  }
+  ScriptApp.newTrigger('respaldoSemanal')
+    .timeBased()
+    .everyWeeks(1)
+    .onWeekDay(ScriptApp.WeekDay.MONDAY)
+    .atHour(6)
+    .create();
+}
+
+function respaldoSemanal() {
+  var ss = libro_();
+  var nombre = 'Conectividad Plus ' + Utilities.formatDate(new Date(), zona_(), 'yyyy-MM-dd HH:mm');
+  var carpeta = carpetaRespaldos_();
+  var copia = ss.copy(nombre);
+  DriveApp.getFileById(copia.getId()).moveTo(carpeta);
+  podarRespaldos_(carpeta);
+}
+
+function carpetaRespaldos_() {
+  var halladas = DriveApp.getFoldersByName(CARPETA_RESPALDOS_);
+  if (halladas.hasNext()) return halladas.next();
+  return DriveApp.createFolder(CARPETA_RESPALDOS_);
+}
+
+function podarRespaldos_(carpeta) {
+  var it = carpeta.getFiles();
+  var lista = [];
+  while (it.hasNext()) lista.push(it.next());
+  lista.sort(function (a, b) {
+    return b.getDateCreated().getTime() - a.getDateCreated().getTime();
+  });
+  var i;
+  for (i = MAX_RESPALDOS_; i < lista.length; i++) lista[i].setTrashed(true);
+}
+
 function macRepetida_(sh, mac, exceptoId) {
   var equipos = leerObjetos_(sh, HEADERS_DISPOSITIVOS);
   var i;
